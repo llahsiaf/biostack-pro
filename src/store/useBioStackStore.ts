@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DEFAULT_PEPTIDES } from '../database/defaultPeptides';
 
 export interface InventoryItem {
   id: string;
@@ -23,6 +22,7 @@ export interface InventoryItem {
   estimatedDaysLeft?: number;
   isCycleActive?: boolean;
   isReminderActive?: boolean;
+  currentVolumeMl?: number; // Tracker Sisa Cairan Real-time
 }
 
 export interface FreezerItem {
@@ -52,13 +52,158 @@ export interface InjectionLog {
   timestamp: string;
 }
 
+// Data Peptida Bawaan (Mandiri tanpa dependensi luar)
+const INITIAL_FREEZER_PEPTIDES: FreezerItem[] = [
+  {
+    id: 'pep-reta-1',
+    name: 'Retatrutide',
+    category: 'GLP-1 / GIP / GCG Tri-Agonist',
+    vialSize: 10,
+    unit: 'mg',
+    quantity: 10,
+    defaultBacWater: 2.0,
+    targetDose: 2.0,
+    frequency: 'weekly',
+    frequencyLabel: 'Mingguan (Weekly)',
+    halfLifeDays: 6.0,
+    maxFridgeDays: 56,
+    activeDays: ['Sen'],
+    injectionTime: '08:00',
+  },
+  {
+    id: 'pep-tirz-1',
+    name: 'Tirzepatide',
+    category: 'GLP-1 / GIP Dual Agonist',
+    vialSize: 10,
+    unit: 'mg',
+    quantity: 10,
+    defaultBacWater: 2.0,
+    targetDose: 2.5,
+    frequency: 'weekly',
+    frequencyLabel: 'Mingguan (Weekly)',
+    halfLifeDays: 5.0,
+    maxFridgeDays: 56,
+    activeDays: ['Sen'],
+    injectionTime: '08:00',
+  },
+  {
+    id: 'pep-sema-1',
+    name: 'Semaglutide',
+    category: 'GLP-1 Receptor Agonist',
+    vialSize: 5,
+    unit: 'mg',
+    quantity: 8,
+    defaultBacWater: 2.0,
+    targetDose: 0.5,
+    frequency: 'weekly',
+    frequencyLabel: 'Mingguan (Weekly)',
+    halfLifeDays: 7.0,
+    maxFridgeDays: 56,
+    activeDays: ['Sen'],
+    injectionTime: '08:00',
+  },
+  {
+    id: 'pep-cagri-1',
+    name: 'Cagrilintide',
+    category: 'Amylin Analogue / Satiety',
+    vialSize: 5,
+    unit: 'mg',
+    quantity: 8,
+    defaultBacWater: 2.0,
+    targetDose: 0.3,
+    frequency: 'weekly',
+    frequencyLabel: 'Mingguan (Weekly)',
+    halfLifeDays: 7.0,
+    maxFridgeDays: 56,
+    activeDays: ['Sen'],
+    injectionTime: '08:00',
+  },
+  {
+    id: 'pep-ghk-1',
+    name: 'GHK-Cu',
+    category: 'Tissue Repair & Collagen',
+    vialSize: 50,
+    unit: 'mg',
+    quantity: 10,
+    defaultBacWater: 3.0,
+    targetDose: 2.0,
+    frequency: 'daily',
+    frequencyLabel: 'Harian (Daily)',
+    halfLifeDays: 0.5,
+    maxFridgeDays: 28,
+    activeDays: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'],
+    injectionTime: '08:00',
+  },
+  {
+    id: 'pep-motsc-1',
+    name: 'MOTS-c',
+    category: 'Mitochondrial Energy',
+    vialSize: 20,
+    unit: 'mg',
+    quantity: 10,
+    defaultBacWater: 2.0,
+    targetDose: 5.0,
+    frequency: '3x_week',
+    frequencyLabel: '3x Seminggu',
+    halfLifeDays: 1.0,
+    maxFridgeDays: 28,
+    activeDays: ['Sen', 'Rab', 'Jum'],
+    injectionTime: '08:00',
+  },
+  {
+    id: 'pep-lc526-1',
+    name: 'LC526',
+    category: 'Fat Metabolism & Liver',
+    vialSize: 10,
+    unit: 'mL',
+    quantity: 10,
+    defaultBacWater: 0,
+    targetDose: 0.2,
+    frequency: 'daily',
+    frequencyLabel: 'Harian (Daily)',
+    halfLifeDays: 1.0,
+    maxFridgeDays: 60,
+    activeDays: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'],
+    injectionTime: '08:00',
+  },
+  {
+    id: 'pep-kiss-1',
+    name: 'Kisspeptin',
+    category: 'Hormonal Axis Support',
+    vialSize: 10,
+    unit: 'mg',
+    quantity: 10,
+    defaultBacWater: 2.0,
+    targetDose: 0.2,
+    frequency: '3x_week',
+    frequencyLabel: '3x Seminggu',
+    halfLifeDays: 1.0,
+    maxFridgeDays: 28,
+    activeDays: ['Sen', 'Rab', 'Jum'],
+    injectionTime: '17:15',
+  },
+];
+
+// Urutan Rotasi Titik Anatomi Indonesia
+export const ROTATION_SITES = [
+  'KA',   // Perut Kanan Atas
+  'KiA',  // Perut Kiri Atas
+  'KB',   // Perut Kanan Bawah
+  'KiB',  // Perut Kiri Bawah
+  'PKi',  // Paha Kiri Luar
+  'PKn',  // Paha Kanan Luar
+  'LKi',  // Lengan Kiri Belakang
+  'LKn',  // Lengan Kanan Belakang
+  'BKi',  // Bokong Kiri Atas
+  'BKn',  // Bokong Kanan Atas
+];
+
 interface BioStackState {
   inventory: InventoryItem[];
   freezerStock: FreezerItem[];
   injectionHistory: InjectionLog[];
   currentSite: string;
 
-  // Actions
   setSite: (siteId: string) => void;
   rotateToNextSite: () => void;
   logInjection: (log: InjectionLog) => void;
@@ -74,20 +219,6 @@ interface BioStackState {
   removeInventoryItem: (id: string) => void;
   updateInventoryItem: (id: string, updates: Partial<InventoryItem>) => void;
 }
-
-// Daftar Urutan Rotasi Anatomi Bahasa Indonesia
-export const ROTATION_SITES = [
-  'KA',   // Perut Kanan Atas
-  'KiA',  // Perut Kiri Atas
-  'KB',   // Perut Kanan Bawah
-  'KiB',  // Perut Kiri Bawah
-  'PKi',  // Paha Kiri Luar
-  'PKn',  // Paha Kanan Luar
-  'LKi',  // Lengan Kiri Belakang
-  'LKn',  // Lengan Kanan Belakang
-  'BKi',  // Bokong Kiri Atas
-  'BKn',  // Bokong Kanan Atas
-];
 
 export const useBioStackStore = create<BioStackState>()(
   persist(
@@ -112,44 +243,31 @@ export const useBioStackStore = create<BioStackState>()(
           estimatedDaysLeft: 34,
           isCycleActive: false,
           isReminderActive: true,
+          currentVolumeMl: 1.0, // Tracker cairan
         },
         {
           id: 'inv-2',
-          name: 'GHK-Cu',
-          category: 'Tissue Repair / Anti-Aging',
-          vialSize: 50,
+          name: 'Kisspeptin',
+          category: 'Hormonal Axis Support',
+          vialSize: 10,
           unit: 'mg',
-          bacWater: 3.0,
-          targetDose: 2.0,
+          bacWater: 2.0,
+          targetDose: 0.2,
           doseUnit: 'mg',
-          frequency: 'daily',
-          frequencyLabel: 'Harian (Daily)',
-          halfLifeDays: 0.5,
+          frequency: '3x_week',
+          frequencyLabel: '3x Seminggu',
+          halfLifeDays: 1.0,
           maxFridgeDays: 28,
-          activeDays: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'],
-          injectionTime: '08:00',
-          reconstitutedDate: '28 Agu 2026',
-          estimatedDaysLeft: 24,
+          activeDays: ['Sen', 'Rab', 'Jum'],
+          injectionTime: '17:15',
+          reconstitutedDate: '29 Agu 2026',
+          estimatedDaysLeft: 22,
           isCycleActive: false,
           isReminderActive: true,
+          currentVolumeMl: 2.0, // Tracker cairan
         },
       ],
-      freezerStock: DEFAULT_PEPTIDES.map((p) => ({
-        id: p.id,
-        name: p.name,
-        category: p.category,
-        vialSize: p.defaultVialSize,
-        unit: p.vialUnit,
-        quantity: p.defaultStock,
-        defaultBacWater: p.defaultBacWater,
-        targetDose: p.targetDose,
-        frequency: p.frequency,
-        frequencyLabel: p.frequencyLabel,
-        halfLifeDays: p.halfLifeDays,
-        maxFridgeDays: p.maxFridgeDays,
-        activeDays: p.activeDays,
-        injectionTime: p.injectionTime,
-      })),
+      freezerStock: INITIAL_FREEZER_PEPTIDES,
       injectionHistory: [],
       currentSite: 'KA',
 
@@ -224,6 +342,7 @@ export const useBioStackStore = create<BioStackState>()(
           estimatedDaysLeft: Math.round(item.maxFridgeDays * 0.8),
           isCycleActive: false,
           isReminderActive: true,
+          currentVolumeMl: bacWater, // Set volume awal sesuai input BAC Water
         };
 
         set((state) => ({
@@ -261,6 +380,7 @@ export const useBioStackStore = create<BioStackState>()(
           estimatedDaysLeft: item.maxFridgeDays,
           isCycleActive: false,
           isReminderActive: true,
+          currentVolumeMl: item.vialSize, // Set volume awal sesuai ukuran mL vial
         };
 
         set((state) => ({
