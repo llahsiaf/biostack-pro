@@ -1,6 +1,6 @@
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { Alert } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
 
 interface CalendarSyncParams {
   peptideName: string;
@@ -36,8 +36,8 @@ export async function exportToAppleCalendar(params: CalendarSyncParams) {
       dialClicks,
     } = params;
 
-    // Parsing jam dan menit (misal: "08:00" -> hour: 8, min: 0)
-    const timeParts = injectionTime.split(/[:.]/);
+    // Parsing jam dan menit (misal: "08:00" -> hour: 08, min: 00)
+    const timeParts = (injectionTime || '08:00').split(/[:.]/);
     const hours = timeParts[0] ? timeParts[0].padStart(2, '0') : '08';
     const minutes = timeParts[1] ? timeParts[1].padStart(2, '0') : '00';
 
@@ -48,8 +48,8 @@ export async function exportToAppleCalendar(params: CalendarSyncParams) {
     const day = String(now.getDate()).padStart(2, '0');
     const dtStart = `${year}${month}${day}T${hours}${minutes}00`;
 
-    // Buat rule pengulangan jadwal
-    const mappedDays = activeDays.map((d) => DAY_CODE_MAP[d]).filter(Boolean);
+    // Penyusunan Recurrence Rule (RRULE)
+    const mappedDays = (activeDays || ['Sen']).map((d) => DAY_CODE_MAP[d]).filter(Boolean);
     let rruleString = 'FREQ=WEEKLY';
     if (mappedDays.length > 0) {
       rruleString = `FREQ=WEEKLY;BYDAY=${mappedDays.join(',')}`;
@@ -59,7 +59,7 @@ export async function exportToAppleCalendar(params: CalendarSyncParams) {
     const summary = `BioStack PRO: Injeksi ${peptideName} (${targetDose} ${unit})`;
     const description = `Protokol Injeksi Peptida BioStack PRO\\nSenyawa: ${peptideName}\\nTarget Dosis: ${targetDose} ${unit}\\nVolume: ${volumeMl || '0.200'} mL\\nDial Pen: ${dialClicks || 20} Klik\\nFrekuensi: ${frequencyLabel}\\nCatatan: Rotasikan lokasi subkutan minimal 2.5 cm dari titik sebelumnya.`;
 
-    // Konten .ics iCalendar format
+    // Format Berkas iCalendar Standar RFC 5545
     const icsContent = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
@@ -83,15 +83,24 @@ export async function exportToAppleCalendar(params: CalendarSyncParams) {
       'END:VCALENDAR',
     ].join('\r\n');
 
-    // Simpan file sementara di storage lokal perangkat
+    // Simpan berkas ke direktori dokumen lokal
     const cleanFileName = peptideName.replace(/[^a-zA-Z0-9]/g, '_');
-    const fileUri = `${FileSystem.cacheDirectory}Jadwal_${cleanFileName}.ics`;
+    const fileUri = `${FileSystem.documentDirectory}Jadwal_${cleanFileName}.ics`;
 
     await FileSystem.writeAsStringAsync(fileUri, icsContent, {
       encoding: FileSystem.EncodingType.UTF8,
     });
 
-    // Buka dialog native iOS Apple Calendar
+    // Buka langsung aplikasi Kalender iOS
+    if (Platform.OS === 'ios') {
+      const canOpen = await Linking.canOpenURL(fileUri);
+      if (canOpen) {
+        await Linking.openURL(fileUri);
+        return;
+      }
+    }
+
+    // Fallback native sharing jika Linking lokal dibatasi
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(fileUri, {
         mimeType: 'text/calendar',
@@ -99,9 +108,9 @@ export async function exportToAppleCalendar(params: CalendarSyncParams) {
         UTI: 'com.apple.ical.ics',
       });
     } else {
-      Alert.alert('Info', 'Fitur berbagi kalender tidak didukung pada sistem ini.');
+      Alert.alert('Info', 'Berkas kalender berhasil dibuat di memori perangkat.');
     }
   } catch (error) {
-    Alert.alert('Gagal', 'Terjadi kesalahan saat mengekspor berkas kalender.');
+    Alert.alert('Gagal', 'Terjadi kesalahan saat mengekspor jadwal kalender.');
   }
 }
