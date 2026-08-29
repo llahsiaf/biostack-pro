@@ -27,10 +27,15 @@ import {
   Snowflake,
   Activity,
 } from 'lucide-react-native';
+import * as Notifications from 'expo-notifications';
 import { useBioStackStore, InventoryItem, FreezerItem } from '../store/useBioStackStore';
 import { exportToAppleCalendar } from '../utils/calendarHelper';
 
 const DAYS_OF_WEEK = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+
+const DAY_TO_WEEKDAY: Record<string, number> = {
+  Min: 1, Sen: 2, Sel: 3, Rab: 4, Kam: 5, Jum: 6, Sab: 7,
+};
 
 const FREQUENCY_PRESETS = [
   { id: 'daily', label: 'Harian (Daily)', sub: 'Setiap Hari', days: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'] },
@@ -114,6 +119,69 @@ export const InventoryScreen: React.FC = () => {
     return { currentVol, initialVol, progressPercent, daysLeft };
   };
 
+  // ============================================================
+  // NOTIFIKASI: Schedule / Cancel / Sync
+  // ============================================================
+  const syncItemNotifications = async (item: InventoryItem) => {
+    // 1. Cancel notifikasi lama jika ada
+    if (item.notificationIds && item.notificationIds.length > 0) {
+      for (const id of item.notificationIds) {
+        try {
+          await Notifications.cancelScheduledNotificationAsync(id);
+        } catch (e) { /* ignore */ }
+      }
+    }
+
+    // 2. Jika reminder dimatikan, hapus ID saja
+    if (!item.isReminderActive || !item.activeDays || item.activeDays.length === 0) {
+      updateInventoryItem(item.id, { notificationIds: [] });
+      return;
+    }
+
+    // 3. Schedule notifikasi baru (satu per hari aktif, repeating weekly)
+    const ids: string[] = [];
+    const [hours, minutes] = (item.injectionTime || '08:00').split(':').map(Number);
+
+    for (const day of item.activeDays) {
+      const weekday = DAY_TO_WEEKDAY[day];
+      if (!weekday) continue;
+
+      try {
+        const notifId = await Notifications.scheduleNotificationAsync({
+          content: {
+            title: '⏰ Waktunya Injeksi BioStack',
+            body: `Suntik ${item.name} (${item.targetDose} ${item.unit}) — Situs: ${currentSite || 'KA'}`,
+            sound: true,
+          },
+          trigger: {
+            weekday: weekday,
+            hour: hours || 8,
+            minute: minutes || 0,
+            repeats: true,
+          } as Notifications.WeeklyTriggerInput,
+        });
+        ids.push(notifId);
+      } catch (e) {
+        console.warn('Gagal schedule notifikasi:', e);
+      }
+    }
+
+    // 4. Simpan notificationIds ke store
+    updateInventoryItem(item.id, { notificationIds: ids });
+  };
+
+  const handleRemoveItem = async (item: InventoryItem) => {
+    // Cancel semua notifikasi item ini sebelum hapus
+    if (item.notificationIds && item.notificationIds.length > 0) {
+      for (const id of item.notificationIds) {
+        try {
+          await Notifications.cancelScheduledNotificationAsync(id);
+        } catch (e) { /* ignore */ }
+      }
+    }
+    removeInventoryItem(item.id);
+  };
+
   const handleDirectSyncCalendar = async (item: InventoryItem) => {
     const metrics = calculateMetrics(item);
     await exportToAppleCalendar({
@@ -191,22 +259,32 @@ export const InventoryScreen: React.FC = () => {
     setIsScheduleModalOpen(true);
   };
 
-  const handleSaveSchedule = () => {
+  const handleSaveSchedule = async () => {
     if (!scheduleItem) return;
-    updateInventoryItem(scheduleItem.id, {
+
+    const updatedItem: Partial<InventoryItem> = {
       frequency: frequencyKey,
       frequencyLabel: frequencyLabel,
       activeDays: activeDays,
       injectionTime: injectionTime,
       isCycleActive: isCycleActive,
       isReminderActive: isReminderActive,
-    });
+    };
+
+    // Update store dulu
+    updateInventoryItem(scheduleItem.id, updatedItem);
+
+    // Sync notifikasi (cancel lama + schedule baru)
+    const freshItem = useBioStackStore.getState().inventory.find((i) => i.id === scheduleItem.id);
+    if (freshItem) {
+      await syncItemNotifications({ ...freshItem, ...updatedItem } as InventoryItem);
+    }
+
     setIsScheduleModalOpen(false);
   };
 
   return (
     <View style={styles.container}>
-      {/* Top Banner Status Kulkas & Freezer */}
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
           <Droplets size={18} color="#10b981" />
@@ -290,7 +368,7 @@ export const InventoryScreen: React.FC = () => {
                   <TouchableOpacity
                     onPress={() => Alert.alert('Hapus Senyawa', `Keluarkan ${item.name}?`, [
                       { text: 'Batal', style: 'cancel' },
-                      { text: 'Hapus', style: 'destructive', onPress: () => removeInventoryItem(item.id) },
+                      { text: 'Hapus', style: 'destructive', onPress: () => handleRemoveItem(item) },
                     ])}
                     style={styles.iconBtn}
                   >
@@ -565,7 +643,7 @@ export const InventoryScreen: React.FC = () => {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* MODAL 3: AMBIL FREEZER (DIKEMBALIKAN PRESISI SEPERTI GAMBAR 9 & 10) */}
+      {/* MODAL 3: Ambil Freezer */}
       <Modal visible={isTakeFreezerModalOpen} animationType="fade" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.floatingModalOverlay}>
           <View style={styles.floatingModalBox}>
@@ -643,7 +721,6 @@ export const InventoryScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  // LAYOUT UTAMA
   container: { flex: 1, backgroundColor: '#030712', paddingHorizontal: 14, paddingTop: 8 },
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   statCard: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#090d16', borderWidth: 1, borderColor: '#1e293b', borderRadius: 12, padding: 10, gap: 10 },
@@ -701,7 +778,6 @@ const styles = StyleSheet.create({
   injectMainBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#10b981', paddingVertical: 10, borderRadius: 10, marginTop: 4 },
   injectMainBtnText: { fontSize: 12, fontWeight: '800', color: '#022c22' },
 
-  // STYLES MODAL DOSIS PRESISI
   doseModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.85)', justifyContent: 'flex-end' },
   doseModalBox: { backgroundColor: '#0f172a', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 18, height: '85%' },
   doseModalScroll: { paddingBottom: 40, gap: 14 },
@@ -748,7 +824,6 @@ const styles = StyleSheet.create({
   applyBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#10b981', paddingVertical: 14, borderRadius: 12, marginTop: 10 },
   applyBtnText: { fontSize: 13, fontWeight: '900', color: '#022c22' },
 
-  // STYLES MODAL JADWAL (TETAP)
   modalLargeBox: { backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: '#1e293b', padding: 16, maxHeight: '85%' },
   modalHeaderBasic: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderColor: '#1e293b', paddingBottom: 10 },
   modalTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -773,7 +848,6 @@ const styles = StyleSheet.create({
   modalCancelBtnText: { fontSize: 12, fontWeight: '700', color: '#94a3b8' },
   modalSaveScheduleBtn: { flex: 2, backgroundColor: '#38bdf8', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
   
-  // STYLES MODAL FREEZER (Gambar 9 & 10)
   floatingModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.85)', justifyContent: 'center', paddingHorizontal: 16 },
   floatingModalBox: { backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: '#1e293b', padding: 16, maxHeight: '85%' },
   freezerModalScroll: { paddingTop: 14, paddingBottom: 10 },
