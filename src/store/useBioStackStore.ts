@@ -70,11 +70,24 @@ interface BioStackState {
   updateFreezerQuantity: (id: string, quantity: number) => void;
 
   reconstituteToFridge: (freezerItemId: string, bacWater: number) => void;
+  transferLiquidToFridge: (freezerItemId: string) => void;
   removeInventoryItem: (id: string) => void;
   updateInventoryItem: (id: string, updates: Partial<InventoryItem>) => void;
 }
 
-const ROTATION_SITES = ['TL', 'TR', 'BR', 'BL', 'LT', 'RT', 'LA', 'RA', 'LG', 'RG'];
+// Daftar Urutan Rotasi Anatomi Bahasa Indonesia
+export const ROTATION_SITES = [
+  'KA',   // Perut Kanan Atas
+  'KiA',  // Perut Kiri Atas
+  'KB',   // Perut Kanan Bawah
+  'KiB',  // Perut Kiri Bawah
+  'PKi',  // Paha Kiri Luar
+  'PKn',  // Paha Kanan Luar
+  'LKi',  // Lengan Kiri Belakang
+  'LKn',  // Lengan Kanan Belakang
+  'BKi',  // Bokong Kiri Atas
+  'BKn',  // Bokong Kanan Atas
+];
 
 export const useBioStackStore = create<BioStackState>()(
   persist(
@@ -138,25 +151,31 @@ export const useBioStackStore = create<BioStackState>()(
         injectionTime: p.injectionTime,
       })),
       injectionHistory: [],
-      currentSite: 'TR',
+      currentSite: 'KA',
 
       setSite: (siteId) => set({ currentSite: siteId }),
 
       rotateToNextSite: () => {
         const current = get().currentSite;
         const idx = ROTATION_SITES.indexOf(current);
-        const nextIdx = (idx + 1) % ROTATION_SITES.length;
+        const nextIdx = idx >= 0 ? (idx + 1) % ROTATION_SITES.length : 0;
         set({ currentSite: ROTATION_SITES[nextIdx] });
       },
 
       logInjection: (log) =>
-        set((state) => ({
-          injectionHistory: [log, ...state.injectionHistory],
-        })),
+        set((state) => {
+          const current = state.currentSite;
+          const idx = ROTATION_SITES.indexOf(current);
+          const nextIdx = idx >= 0 ? (idx + 1) % ROTATION_SITES.length : 0;
+          return {
+            injectionHistory: [log, ...(state.injectionHistory || [])],
+            currentSite: ROTATION_SITES[nextIdx],
+          };
+        }),
 
       deleteInjectionLog: (id) =>
         set((state) => ({
-          injectionHistory: state.injectionHistory.filter((h) => h.id !== id),
+          injectionHistory: (state.injectionHistory || []).filter((h) => h?.id !== id),
         })),
 
       clearHistory: () => set({ injectionHistory: [] }),
@@ -203,6 +222,43 @@ export const useBioStackStore = create<BioStackState>()(
             year: 'numeric',
           }),
           estimatedDaysLeft: Math.round(item.maxFridgeDays * 0.8),
+          isCycleActive: false,
+          isReminderActive: true,
+        };
+
+        set((state) => ({
+          freezerStock: state.freezerStock.map((f) =>
+            f.id === freezerItemId ? { ...f, quantity: f.quantity - 1 } : f
+          ),
+          inventory: [newInv, ...state.inventory],
+        }));
+      },
+
+      transferLiquidToFridge: (freezerItemId) => {
+        const item = get().freezerStock.find((f) => f.id === freezerItemId);
+        if (!item || item.quantity <= 0) return;
+
+        const newInv: InventoryItem = {
+          id: `inv-${Date.now()}`,
+          name: item.name,
+          category: item.category,
+          vialSize: item.vialSize,
+          unit: item.unit,
+          bacWater: 0,
+          targetDose: item.targetDose,
+          doseUnit: item.unit,
+          frequency: item.frequency,
+          frequencyLabel: item.frequencyLabel,
+          halfLifeDays: item.halfLifeDays,
+          maxFridgeDays: item.maxFridgeDays,
+          activeDays: item.activeDays || ['Sen'],
+          injectionTime: item.injectionTime || '08:00',
+          reconstitutedDate: new Date().toLocaleDateString('id-ID', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+          }),
+          estimatedDaysLeft: item.maxFridgeDays,
           isCycleActive: false,
           isReminderActive: true,
         };
