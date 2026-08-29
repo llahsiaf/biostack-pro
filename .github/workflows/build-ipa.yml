@@ -14,19 +14,22 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: Install Dependencies
         run: npm install
 
       - name: Generate iOS Native Project
-        run: npx expo prebuild --platform ios
+        run: npx expo prebuild --platform ios --clean
 
       - name: Compile Unsigned IPA for Sideloading
         run: |
           cd ios
-          xcodebuild -workspace biostackpro.xcworkspace \
-                     -scheme biostackpro \
+          WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
+          SCHEME=$(xcodebuild -list -json | node -e "const data = JSON.parse(require('fs').readFileSync(0, 'utf-8')); console.log(data.workspace ? data.workspace.schemes[0] : data.project.schemes[0]);")
+          echo "Building Workspace: $WORKSPACE with Scheme: $SCHEME"
+          
+          xcodebuild -workspace "$WORKSPACE" \
+                     -scheme "$SCHEME" \
                      -configuration Release \
                      -destination 'generic/platform=iOS' \
                      -derivedDataPath build \
@@ -36,7 +39,7 @@ jobs:
                      build
           
           mkdir -p ../dist/Payload
-          cp -r build/Build/Products/Release-iphoneos/biostackpro.app ../dist/Payload/
+          cp -r build/Build/Products/Release-iphoneos/*.app ../dist/Payload/
           cd ../dist
           zip -r BioStack_PRO_iOS.ipa Payload
           rm -rf Payload
