@@ -53,7 +53,7 @@ jobs:
       - name: Inject Notification Entitlements
         shell: bash
         run: |
-          SCHEME="biostackpro"
+          SCHEME="BioStackPRO"
           ENTITLEMENTS="ios/${SCHEME}/${SCHEME}.entitlements"
           
           echo "Checking entitlements at: $ENTITLEMENTS"
@@ -91,8 +91,8 @@ jobs:
         run: |
           cd ios
           xcodebuild \
-            -workspace biostackpro.xcworkspace \
-            -scheme biostackpro \
+            -workspace BioStackPRO.xcworkspace \
+            -scheme BioStackPRO \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build \
@@ -100,7 +100,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO
           
           mkdir -p Payload
-          cp -r build/Build/Products/Release-iphoneos/biostackpro.app Payload/
+          cp -r build/Build/Products/Release-iphoneos/BioStackPRO.app Payload/
           zip -r ../BioStackPRO-unsigned.ipa Payload
           cd ..
           ls -lh BioStackPRO-unsigned.ipa
