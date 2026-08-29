@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Platform,
   Image,
+  Alert,
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import {
@@ -15,6 +16,7 @@ import {
   RotateCw,
   History,
   Snowflake,
+  Bell,
 } from 'lucide-react-native';
 
 import { InventoryScreen } from './src/screens/InventoryScreen';
@@ -35,26 +37,20 @@ Notifications.setNotificationHandler({
 export default function App() {
   const [activeTab, setActiveTab] = useState<'inventory' | 'rotation' | 'history' | 'freezer'>('inventory');
 
-  // Mendaftarkan Izin Notifikasi ke Sistem iOS
+  // Mendaftarkan Izin Notifikasi ke Sistem iOS secara otomatis saat startup
   useEffect(() => {
     async function requestNotificationPermissions() {
       try {
         const { status: existingStatus } = await Notifications.getPermissionsAsync();
-        let finalStatus = existingStatus;
-
         if (existingStatus !== 'granted') {
-          const { status } = await Notifications.requestPermissionsAsync({
+          await Notifications.requestPermissionsAsync({
             ios: {
               allowAlert: true,
               allowBadge: true,
               allowSound: true,
-              allowDisplayInCarPlay: false,
-              allowCriticalAlerts: false,
               provideAppNotificationSettings: true,
-              allowProvisional: true,
             },
           });
-          finalStatus = status;
         }
       } catch (error) {
         // Fallback aman untuk simulator
@@ -64,30 +60,70 @@ export default function App() {
     requestNotificationPermissions();
   }, []);
 
+  // Fungsi Pemicu Izin Manual (Tombol Lonceng)
+  const handleManualNotificationRequest = async () => {
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync({
+          ios: {
+            allowAlert: true,
+            allowBadge: true,
+            allowSound: true,
+          },
+        });
+        finalStatus = status;
+      }
+
+      if (finalStatus === 'granted') {
+        Alert.alert('Status Notifikasi', 'Izin notifikasi sudah AKTIF. BioStack akan mengirimkan pengingat jadwal injeksi Anda.');
+      } else {
+        Alert.alert(
+          'Izin Ditolak', 
+          'Notifikasi terblokir oleh iOS. Silakan buka Pengaturan > BioStack > izinkan Notifikasi secara manual.'
+        );
+      }
+    } catch (error) {
+      Alert.alert('Gagal', 'Sistem tidak dapat memproses permintaan izin saat ini.');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#030712" />
 
       {/* Header Utama BioStack PRO */}
       <View style={styles.topHeader}>
-        <View style={styles.brandingRow}>
-          {/* Memanggil icon.png dari direktori root */}
-          <View style={styles.brandIconBox}>
-            <Image
-              source={require('./icon.png')}
-              style={styles.brandIconImage}
-              resizeMode="cover"
-            />
-          </View>
-          <View>
-            <View style={styles.titleWithBadge}>
-              <Text style={styles.appTitle}>BioStack</Text>
-              <View style={styles.proBadge}>
-                <Text style={styles.proBadgeText}>PRO</Text>
-              </View>
+        <View style={styles.headerContent}>
+          <View style={styles.brandingRow}>
+            {/* Memanggil icon.png dari direktori root */}
+            <View style={styles.brandIconBox}>
+              <Image
+                source={require('./icon.png')}
+                style={styles.brandIconImage}
+                resizeMode="cover"
+              />
             </View>
-            <Text style={styles.appSubtitle}>Peptide Protocol & Pharmacokinetics</Text>
+            <View>
+              <View style={styles.titleWithBadge}>
+                <Text style={styles.appTitle}>BioStack</Text>
+                <View style={styles.proBadge}>
+                  <Text style={styles.proBadgeText}>PRO</Text>
+                </View>
+              </View>
+              <Text style={styles.appSubtitle}>Peptide Protocol & Pharmacokinetics</Text>
+            </View>
           </View>
+
+          {/* Tombol Pemicu Izin Notifikasi Manual */}
+          <TouchableOpacity 
+            onPress={handleManualNotificationRequest} 
+            style={styles.notificationBtn}
+          >
+            <Bell size={18} color="#94a3b8" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -160,6 +196,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#111827',
   },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   brandingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -204,6 +245,13 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#64748b',
     marginTop: 2,
+  },
+  notificationBtn: {
+    padding: 8,
+    backgroundColor: '#090d16',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1e293b',
   },
   navBar: {
     flexDirection: 'row',
