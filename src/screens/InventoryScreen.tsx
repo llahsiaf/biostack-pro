@@ -26,6 +26,7 @@ import {
   X,
   Snowflake,
   Activity,
+  AlertTriangle,
 } from 'lucide-react-native';
 import * as Notifications from 'expo-notifications';
 import { useBioStackStore, InventoryItem, FreezerItem } from '../store/useBioStackStore';
@@ -43,6 +44,49 @@ const FREQUENCY_PRESETS = [
   { id: '3x_week', label: '3x Seminggu', sub: 'Sen, Rab, Jum', days: ['Sen', 'Rab', 'Jum'] },
   { id: 'weekly', label: 'Mingguan (Weekly)', sub: 'Sen', days: ['Sen'] },
 ];
+
+// ============================================
+// EXPIRY HELPERS
+// ============================================
+const MONTH_MAP: Record<string, number> = {
+  Jan: 0, Feb: 1, Mar: 2, Apr: 3, Mei: 4, Jun: 5,
+  Jul: 6, Agu: 7, Sep: 8, Okt: 9, Nov: 10, Des: 11,
+};
+
+const parseIndonesianDate = (dateStr: string): Date | null => {
+  if (!dateStr) return null;
+  const parts = dateStr.split(' ');
+  if (parts.length !== 3) return null;
+  const day = parseInt(parts[0], 10);
+  const month = MONTH_MAP[parts[1]];
+  const year = parseInt(parts[2], 10);
+  if (isNaN(day) || month === undefined || isNaN(year)) return null;
+  return new Date(year, month, day);
+};
+
+interface ExpiryStatus {
+  status: 'expired' | 'critical' | 'warning';
+  label: string;
+  color: string;
+  daysLeft: number;
+}
+
+const getExpiryStatus = (item: InventoryItem): ExpiryStatus | null => {
+  const reconstituted = parseIndonesianDate(item.reconstitutedDate || '');
+  if (!reconstituted || !item.maxFridgeDays) return null;
+
+  const expiryDate = new Date(reconstituted);
+  expiryDate.setDate(expiryDate.getDate() + item.maxFridgeDays);
+
+  const now = new Date();
+  const diffMs = expiryDate.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 0) return { status: 'expired', label: 'EXPIRED', color: '#ef4444', daysLeft: diffDays };
+  if (diffDays <= 3) return { status: 'critical', label: `${diffDays} HARI`, color: '#ef4444', daysLeft: diffDays };
+  if (diffDays <= 7) return { status: 'warning', label: `${diffDays} HARI`, color: '#f59e0b', daysLeft: diffDays };
+  return null;
+};
 
 export const InventoryScreen: React.FC = () => {
   const {
@@ -123,7 +167,6 @@ export const InventoryScreen: React.FC = () => {
   // NOTIFIKASI: Schedule / Cancel / Sync
   // ============================================================
   const syncItemNotifications = async (item: InventoryItem) => {
-    // 1. Cancel notifikasi lama jika ada
     if (item.notificationIds && item.notificationIds.length > 0) {
       for (const id of item.notificationIds) {
         try {
@@ -132,13 +175,11 @@ export const InventoryScreen: React.FC = () => {
       }
     }
 
-    // 2. Jika reminder dimatikan, hapus ID saja
     if (!item.isReminderActive || !item.activeDays || item.activeDays.length === 0) {
       updateInventoryItem(item.id, { notificationIds: [] });
       return;
     }
 
-    // 3. Schedule notifikasi baru (satu per hari aktif, repeating weekly)
     const ids: string[] = [];
     const [hours, minutes] = (item.injectionTime || '08:00').split(':').map(Number);
 
@@ -166,12 +207,10 @@ export const InventoryScreen: React.FC = () => {
       }
     }
 
-    // 4. Simpan notificationIds ke store
     updateInventoryItem(item.id, { notificationIds: ids });
   };
 
   const handleRemoveItem = async (item: InventoryItem) => {
-    // Cancel semua notifikasi item ini sebelum hapus
     if (item.notificationIds && item.notificationIds.length > 0) {
       for (const id of item.notificationIds) {
         try {
@@ -271,10 +310,8 @@ export const InventoryScreen: React.FC = () => {
       isReminderActive: isReminderActive,
     };
 
-    // Update store dulu
     updateInventoryItem(scheduleItem.id, updatedItem);
 
-    // Sync notifikasi (cancel lama + schedule baru)
     const freshItem = useBioStackStore.getState().inventory.find((i) => i.id === scheduleItem.id);
     if (freshItem) {
       await syncItemNotifications({ ...freshItem, ...updatedItem } as InventoryItem);
@@ -339,6 +376,7 @@ export const InventoryScreen: React.FC = () => {
           const isToday = isInjectToday(item.activeDays);
           const metrics = calculateMetrics(item);
           const liquid = getLiquidStatus(item);
+          const expiryStatus = getExpiryStatus(item);
 
           return (
             <View style={styles.peptideCard}>
@@ -351,6 +389,13 @@ export const InventoryScreen: React.FC = () => {
                 </TouchableOpacity>
 
                 <View style={styles.headerActionRow}>
+                  {expiryStatus && (
+                    <View style={[styles.expiryBadge, { borderColor: expiryStatus.color, backgroundColor: `${expiryStatus.color}15` }]}>
+                      <AlertTriangle size={10} color={expiryStatus.color} />
+                      <Text style={[styles.expiryBadgeText, { color: expiryStatus.color }]}>{expiryStatus.label}</Text>
+                    </View>
+                  )}
+
                   {isToday ? (
                     <View style={styles.badgeToday}><Text style={styles.badgeTodayText}>Injeksi Hari Ini</Text></View>
                   ) : (
@@ -744,6 +789,8 @@ const styles = StyleSheet.create({
   vialBadge: { backgroundColor: '#1e293b', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   vialBadgeText: { fontSize: 9, fontWeight: '700', color: '#94a3b8' },
   headerActionRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  expiryBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
+  expiryBadgeText: { fontSize: 8, fontWeight: '900' },
   badgeToday: { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderWidth: 1, borderColor: '#10b981', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   badgeTodayText: { fontSize: 9, fontWeight: '800', color: '#10b981' },
   badgeRest: { backgroundColor: '#1e293b', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
