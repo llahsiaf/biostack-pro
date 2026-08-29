@@ -12,7 +12,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  Share,
 } from 'react-native';
 import {
   FlaskConical,
@@ -22,11 +21,10 @@ import {
   Droplets,
   Syringe,
   X,
-  Check,
   Snowflake,
-  Plus,
 } from 'lucide-react-native';
 import { useBioStackStore } from '../store/useBioStackStore';
+import { exportToAppleCalendar } from '../utils/calendarHelper';
 
 const DAYS_OF_WEEK = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
 
@@ -56,7 +54,6 @@ export const InventoryScreen: React.FC = () => {
 
   const totalFreezerVials = freezerStock.reduce((acc, curr) => acc + curr.quantity, 0);
 
-  // Cek apakah hari ini adalah jadwal suntik
   const isTodayInjectionDay = (itemDays: string[]) => {
     const dayMap = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
     const currentDay = dayMap[new Date().getDay()];
@@ -112,28 +109,60 @@ export const InventoryScreen: React.FC = () => {
     Alert.alert('Sukses', 'Jadwal dan pengaturan injeksi berhasil diperbarui.');
   };
 
-  const handleSyncAppleCalendar = async () => {
-    if (!selectedItem) return;
-    const icsSummary = `Protokol Injeksi BioStack: ${selectedItem.name} (${selectedItem.targetDose} ${selectedItem.unit})`;
-    const icsContent = `BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//BioStack PRO//ID\nBEGIN:VEVENT\nSUMMARY:${icsSummary}\nDESCRIPTION:Dosis: ${selectedItem.targetDose} ${selectedItem.unit}\\nWaktu: ${injectionTime}\\nHari: ${selectedDays.join(', ')}\nSTATUS:CONFIRMED\nEND:VEVENT\nEND:VCALENDAR`;
+  const handleSyncAppleCalendarFromCard = async (item: any) => {
+    const bac = item.bacWater || 2.0;
+    const concentration = item.vialSize / bac;
+    const volMl = (item.targetDose / concentration).toFixed(3);
+    const spuitIu = Math.round(parseFloat(volMl) * 100);
 
-    try {
-      await Share.share({
-        title: `${selectedItem.name} Schedule (.ics)`,
-        message: icsContent,
-      });
-    } catch (e) {
-      Alert.alert('Info', 'Kalender disiapkan.');
-    }
+    await exportToAppleCalendar({
+      peptideName: item.name,
+      targetDose: item.targetDose,
+      unit: item.unit,
+      activeDays: item.activeDays || ['Sen'],
+      injectionTime: item.injectionTime || '08:00',
+      frequencyLabel: item.frequencyLabel || 'Mingguan (Weekly)',
+      volumeMl: volMl,
+      dialClicks: spuitIu,
+    });
+  };
+
+  const handleSyncAppleCalendarFromModal = async () => {
+    if (!selectedItem) return;
+
+    const bac = selectedItem.bacWater || 2.0;
+    const concentration = selectedItem.vialSize / bac;
+    const volMl = (selectedItem.targetDose / concentration).toFixed(3);
+    const spuitIu = Math.round(parseFloat(volMl) * 100);
+
+    await exportToAppleCalendar({
+      peptideName: selectedItem.name,
+      targetDose: selectedItem.targetDose,
+      unit: selectedItem.unit,
+      activeDays: selectedDays,
+      injectionTime: injectionTime,
+      frequencyLabel:
+        activeFrequency === 'weekly'
+          ? 'Mingguan (Weekly)'
+          : activeFrequency === 'daily'
+          ? 'Harian (Daily)'
+          : `${activeFrequency}x Seminggu`,
+      volumeMl: volMl,
+      dialClicks: spuitIu,
+    });
   };
 
   const handleInjectNow = (item: any) => {
+    const bac = item.bacWater || 2.0;
+    const concentration = item.vialSize / bac;
+    const volMl = (item.targetDose / concentration).toFixed(3);
+
     logInjection({
       id: `inj-${Date.now()}`,
       peptideName: item.name,
       dose: item.targetDose,
       unit: item.unit,
-      volumeMl: item.volumeMl || ((item.targetDose / (item.vialSize / (item.bacWater || 2)))).toFixed(3),
+      volumeMl: item.volumeMl || volMl,
       siteId: currentSite,
       timestamp: new Date().toLocaleDateString('id-ID', {
         day: '2-digit',
@@ -158,7 +187,9 @@ export const InventoryScreen: React.FC = () => {
           <Droplets size={20} color="#10b981" />
           <View>
             <Text style={styles.statLabel}>Aktif di Kulkas</Text>
-            <Text style={styles.statValue}>{inventory.length} <Text style={styles.statUnit}>Vial Cair</Text></Text>
+            <Text style={styles.statValue}>
+              {inventory.length} <Text style={styles.statUnit}>Vial Cair</Text>
+            </Text>
           </View>
         </View>
 
@@ -166,7 +197,9 @@ export const InventoryScreen: React.FC = () => {
           <Snowflake size={20} color="#38bdf8" />
           <View>
             <Text style={styles.statLabel}>Stok Freezer</Text>
-            <Text style={styles.statValue}>{totalFreezerVials} <Text style={styles.statUnit}>Vial Beku</Text></Text>
+            <Text style={styles.statValue}>
+              {totalFreezerVials} <Text style={styles.statUnit}>Vial Beku</Text>
+            </Text>
           </View>
         </View>
       </View>
@@ -192,7 +225,9 @@ export const InventoryScreen: React.FC = () => {
           <View style={styles.emptyCard}>
             <FlaskConical size={32} color="#64748b" />
             <Text style={styles.emptyTitle}>Kulkas Masih Kosong</Text>
-            <Text style={styles.emptySub}>Buka tab Freezer lalu tekan Larutkan ke Kulkas untuk mulai melarutkan peptida.</Text>
+            <Text style={styles.emptySub}>
+              Buka tab Freezer lalu tekan Larutkan ke Kulkas untuk mulai melarutkan peptida.
+            </Text>
           </View>
         }
         renderItem={({ item }) => {
@@ -210,10 +245,23 @@ export const InventoryScreen: React.FC = () => {
                 <View style={styles.cardIdentity}>
                   <Text style={styles.peptideTitle}>{item.name}</Text>
                   <View style={styles.vialBadge}>
-                    <Text style={styles.vialBadgeText}>{item.vialSize}{item.unit} Vial</Text>
+                    <Text style={styles.vialBadgeText}>
+                      {item.vialSize}
+                      {item.unit} Vial
+                    </Text>
                   </View>
-                  <View style={[styles.statusBadge, isToday ? styles.statusBadgeActive : styles.statusBadgeRest]}>
-                    <Text style={[styles.statusBadgeText, isToday ? styles.statusTextActive : styles.statusTextRest]}>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      isToday ? styles.statusBadgeActive : styles.statusBadgeRest,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.statusBadgeText,
+                        isToday ? styles.statusTextActive : styles.statusTextRest,
+                      ]}
+                    >
                       {isToday ? 'Injeksi Hari Ini' : 'Hari Rest'}
                     </Text>
                   </View>
@@ -221,17 +269,27 @@ export const InventoryScreen: React.FC = () => {
 
                 {/* Tombol Aksi Kanan Atas */}
                 <View style={styles.cardHeaderActions}>
-                  <TouchableOpacity onPress={handleSyncAppleCalendar} style={styles.headerIconBtn}>
+                  <TouchableOpacity
+                    onPress={() => handleSyncAppleCalendarFromCard(item)}
+                    style={styles.headerIconBtn}
+                  >
                     <Calendar size={16} color="#94a3b8" />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleOpenScheduleModal(item)} style={styles.headerIconBtn}>
+                  <TouchableOpacity
+                    onPress={() => handleOpenScheduleModal(item)}
+                    style={styles.headerIconBtn}
+                  >
                     <Clock size={16} color="#94a3b8" />
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => {
                       Alert.alert('Hapus Vial', `Keluarkan ${item.name} dari kulkas aktif?`, [
                         { text: 'Batal', style: 'cancel' },
-                        { text: 'Hapus', style: 'destructive', onPress: () => removeInventoryItem(item.id) },
+                        {
+                          text: 'Hapus',
+                          style: 'destructive',
+                          onPress: () => removeInventoryItem(item.id),
+                        },
                       ]);
                     }}
                     style={styles.headerIconBtn}
@@ -249,10 +307,14 @@ export const InventoryScreen: React.FC = () => {
               {/* Badge Parameter Klinis 3 Kolom */}
               <View style={styles.paramPillsRow}>
                 <View style={styles.dosePill}>
-                  <Text style={styles.dosePillText}>Dosis: {item.targetDose} {item.unit}</Text>
+                  <Text style={styles.dosePillText}>
+                    Dosis: {item.targetDose} {item.unit}
+                  </Text>
                 </View>
                 <View style={styles.spuitPill}>
-                  <Text style={styles.spuitPillText}>Spuit: {spuitIu} IU ({volMl} mL)</Text>
+                  <Text style={styles.spuitPillText}>
+                    Spuit: {spuitIu} IU ({volMl} mL)
+                  </Text>
                 </View>
                 <View style={styles.dialPill}>
                   <Text style={styles.dialPillText}>Dial: {dialClicks} Klik</Text>
@@ -267,7 +329,12 @@ export const InventoryScreen: React.FC = () => {
                     const isSelected = item.activeDays?.includes(d);
                     return (
                       <View key={d} style={[styles.dayChip, isSelected && styles.dayChipActive]}>
-                        <Text style={[styles.dayChipText, isSelected && styles.dayChipTextActive]}>
+                        <Text
+                          style={[
+                            styles.dayChipText,
+                            isSelected && styles.dayChipTextActive,
+                          ]}
+                        >
                           {d}
                         </Text>
                       </View>
@@ -299,13 +366,20 @@ export const InventoryScreen: React.FC = () => {
                 </View>
 
                 <View style={styles.progressFooterRow}>
-                  <Text style={styles.dateInfoText}>Dilarutkan: {item.reconstitutedDate || '28 Agu 2026'}</Text>
-                  <Text style={styles.dateInfoText}>Exp Kulkas: {item.maxFridgeDays || 56} Hari</Text>
+                  <Text style={styles.dateInfoText}>
+                    Dilarutkan: {item.reconstitutedDate || '28 Agu 2026'}
+                  </Text>
+                  <Text style={styles.dateInfoText}>
+                    Exp Kulkas: {item.maxFridgeDays || 56} Hari
+                  </Text>
                 </View>
               </View>
 
               {/* Tombol Eksekusi Injeksi */}
-              <TouchableOpacity onPress={() => handleInjectNow(item)} style={styles.injectActionBtn}>
+              <TouchableOpacity
+                onPress={() => handleInjectNow(item)}
+                style={styles.injectActionBtn}
+              >
                 <Syringe size={16} color="#022c22" />
                 <Text style={styles.injectActionBtnText}>Suntik Sekarang ({currentSite})</Text>
               </TouchableOpacity>
@@ -314,14 +388,13 @@ export const InventoryScreen: React.FC = () => {
         }}
       />
 
-      {/* Modal Jadwal & Pengaturan Suntik (Triggered by Clock Icon) */}
+      {/* Modal Jadwal & Pengaturan Suntik */}
       <Modal visible={isScheduleModalOpen} animationType="slide" transparent>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalOverlay}
         >
           <View style={styles.modalContainer}>
-            {/* Modal Header */}
             <View style={styles.modalHeader}>
               <View style={styles.modalHeaderTitleRow}>
                 <Clock size={18} color="#38bdf8" />
@@ -332,13 +405,21 @@ export const InventoryScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.modalScrollBody} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              contentContainerStyle={styles.modalScrollBody}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
               {/* Protokol Medis Header Row */}
               <View style={styles.protocolHeaderBox}>
                 <Text style={styles.protocolLabel}>Protokol Medis:</Text>
                 <View style={styles.protocolActiveBadge}>
                   <Text style={styles.protocolActiveText}>
-                    {activeFrequency === 'weekly' ? 'Mingguan (Weekly)' : activeFrequency === 'daily' ? 'Harian (Daily)' : `${activeFrequency}x Seminggu`}
+                    {activeFrequency === 'weekly'
+                      ? 'Mingguan (Weekly)'
+                      : activeFrequency === 'daily'
+                      ? 'Harian (Daily)'
+                      : `${activeFrequency}x Seminggu`}
                   </Text>
                 </View>
               </View>
@@ -350,7 +431,14 @@ export const InventoryScreen: React.FC = () => {
                   onPress={() => handleApplyPreset('daily')}
                   style={[styles.presetCard, activeFrequency === 'daily' && styles.presetCardActive]}
                 >
-                  <Text style={[styles.presetName, activeFrequency === 'daily' && styles.presetNameActive]}>Harian (Daily)</Text>
+                  <Text
+                    style={[
+                      styles.presetName,
+                      activeFrequency === 'daily' && styles.presetNameActive,
+                    ]}
+                  >
+                    Harian (Daily)
+                  </Text>
                   <Text style={styles.presetSub}>Setiap Hari</Text>
                 </TouchableOpacity>
 
@@ -358,7 +446,14 @@ export const InventoryScreen: React.FC = () => {
                   onPress={() => handleApplyPreset('2x')}
                   style={[styles.presetCard, activeFrequency === '2x' && styles.presetCardActive]}
                 >
-                  <Text style={[styles.presetName, activeFrequency === '2x' && styles.presetNameActive]}>2x Seminggu</Text>
+                  <Text
+                    style={[
+                      styles.presetName,
+                      activeFrequency === '2x' && styles.presetNameActive,
+                    ]}
+                  >
+                    2x Seminggu
+                  </Text>
                   <Text style={styles.presetSub}>Sen, Kam</Text>
                 </TouchableOpacity>
 
@@ -366,15 +461,32 @@ export const InventoryScreen: React.FC = () => {
                   onPress={() => handleApplyPreset('3x')}
                   style={[styles.presetCard, activeFrequency === '3x' && styles.presetCardActive]}
                 >
-                  <Text style={[styles.presetName, activeFrequency === '3x' && styles.presetNameActive]}>3x Seminggu</Text>
+                  <Text
+                    style={[
+                      styles.presetName,
+                      activeFrequency === '3x' && styles.presetNameActive,
+                    ]}
+                  >
+                    3x Seminggu
+                  </Text>
                   <Text style={styles.presetSub}>Sen, Rab, Jum</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   onPress={() => handleApplyPreset('weekly')}
-                  style={[styles.presetCard, activeFrequency === 'weekly' && styles.presetCardActive]}
+                  style={[
+                    styles.presetCard,
+                    activeFrequency === 'weekly' && styles.presetCardActive,
+                  ]}
                 >
-                  <Text style={[styles.presetName, activeFrequency === 'weekly' && styles.presetNameActive]}>Mingguan (Weekly)</Text>
+                  <Text
+                    style={[
+                      styles.presetName,
+                      activeFrequency === 'weekly' && styles.presetNameActive,
+                    ]}
+                  >
+                    Mingguan (Weekly)
+                  </Text>
                   <Text style={styles.presetSub}>Sen</Text>
                 </TouchableOpacity>
               </View>
@@ -390,7 +502,12 @@ export const InventoryScreen: React.FC = () => {
                       onPress={() => toggleDaySelection(d)}
                       style={[styles.modalDayChip, isChecked && styles.modalDayChipActive]}
                     >
-                      <Text style={[styles.modalDayChipText, isChecked && styles.modalDayChipTextActive]}>
+                      <Text
+                        style={[
+                          styles.modalDayChipText,
+                          isChecked && styles.modalDayChipTextActive,
+                        ]}
+                      >
                         {d}
                       </Text>
                     </TouchableOpacity>
@@ -412,7 +529,7 @@ export const InventoryScreen: React.FC = () => {
                 style={styles.modalTextInputTime}
                 value={injectionTime}
                 onChangeText={setInjectionTime}
-                placeholder="08.00"
+                placeholder="08:00"
                 placeholderTextColor="#64748b"
               />
 
@@ -461,14 +578,20 @@ export const InventoryScreen: React.FC = () => {
               </View>
 
               {/* Tombol Sinkronisasi Kalender */}
-              <TouchableOpacity onPress={handleSyncAppleCalendar} style={styles.calendarSyncBtn}>
+              <TouchableOpacity
+                onPress={handleSyncAppleCalendarFromModal}
+                style={styles.calendarSyncBtn}
+              >
                 <Calendar size={16} color="#38bdf8" />
                 <Text style={styles.calendarSyncBtnText}>Sync ke Apple Calendar (.ics)</Text>
               </TouchableOpacity>
 
               {/* Footer Modal Actions */}
               <View style={styles.modalFooterRow}>
-                <TouchableOpacity onPress={() => setIsScheduleModalOpen(false)} style={styles.cancelModalBtn}>
+                <TouchableOpacity
+                  onPress={() => setIsScheduleModalOpen(false)}
+                  style={styles.cancelModalBtn}
+                >
                   <Text style={styles.cancelModalBtnText}>Batal</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={handleSaveSchedule} style={styles.saveModalBtn}>
