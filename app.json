@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "BioStack PRO",
+    "slug": "biostack-pro",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#030712",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.biostack.tracker"
+    }
+  }
+}
