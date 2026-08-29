@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   SafeAreaView,
   StatusBar,
@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   Platform,
 } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import {
   FlaskConical,
   RotateCw,
@@ -23,33 +22,8 @@ import { HistoryScreen } from './src/screens/HistoryScreen';
 import { FreezerScreen } from './src/screens/FreezerScreen';
 import { FloatingAIChat } from './src/components/FloatingAIChat';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
-
 export default function App() {
   const [activeTab, setActiveTab] = useState<'inventory' | 'rotation' | 'history' | 'freezer'>('inventory');
-
-  useEffect(() => {
-    async function requestNotificationPermission() {
-      try {
-        const { status: existingStatus } = await Notifications.getPermissionsAsync();
-        let finalStatus = existingStatus;
-        if (existingStatus !== 'granted') {
-          const { status } = await Notifications.requestPermissionsAsync();
-          finalStatus = status;
-        }
-      } catch (e) {
-        console.log('Error requesting notification permissions:', e);
-      }
-    }
-
-    requestNotificationPermission();
-  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
