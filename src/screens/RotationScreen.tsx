@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
+import Svg, { Rect, Circle, Path, Text as SvgText, G } from 'react-native-svg';
 import {
   RotateCw,
   Compass,
@@ -13,7 +14,7 @@ import {
   Clock,
   ShieldCheck,
 } from 'lucide-react-native';
-import { useBioStackStore } from '../store/useBioStackStore';
+import { useBioStackStore, ROTATION_SITES } from '../store/useBioStackStore';
 
 type BodyZone = 'perut' | 'paha' | 'lengan' | 'bokong';
 
@@ -27,22 +28,22 @@ interface SitePoint {
 
 const ALL_SITES: SitePoint[] = [
   // Zona Perut (Abdomen)
-  { id: 'TL', code: 'TL', name: 'Kiri Atas (TL)', subText: 'Perut kiri atas (2-3 cm dari pusar)', zone: 'perut' },
-  { id: 'TR', code: 'TR', name: 'Kanan Atas (TR)', subText: 'Perut kanan atas (2-3 cm dari pusar)', zone: 'perut' },
-  { id: 'BR', code: 'BR', name: 'Kanan Bawah (BR)', subText: 'Perut kanan bawah (2-3 cm dari pusar)', zone: 'perut' },
-  { id: 'BL', code: 'BL', name: 'Kiri Bawah (BL)', subText: 'Perut kiri bawah (2-3 cm dari pusar)', zone: 'perut' },
+  { id: 'KA', code: 'KA', name: 'Kanan Atas (KA)', subText: 'Perut kanan atas (2-3 cm dari pusar)', zone: 'perut' },
+  { id: 'KiA', code: 'KiA', name: 'Kiri Atas (KiA)', subText: 'Perut kiri atas (2-3 cm dari pusar)', zone: 'perut' },
+  { id: 'KB', code: 'KB', name: 'Kanan Bawah (KB)', subText: 'Perut kanan bawah (2-3 cm dari pusar)', zone: 'perut' },
+  { id: 'KiB', code: 'KiB', name: 'Kiri Bawah (KiB)', subText: 'Perut kiri bawah (2-3 cm dari pusar)', zone: 'perut' },
 
   // Zona Paha (Thighs)
-  { id: 'LT', code: 'LT', name: 'Paha Kiri Luar (LT)', subText: 'Sisi luar paha atas kiri', zone: 'paha' },
-  { id: 'RT', code: 'RT', name: 'Paha Kanan Luar (RT)', subText: 'Sisi luar paha atas kanan', zone: 'paha' },
+  { id: 'PKi', code: 'PKi', name: 'Paha Kiri (PKi)', subText: 'Sisi luar paha atas kiri', zone: 'paha' },
+  { id: 'PKn', code: 'PKn', name: 'Paha Kanan (PKn)', subText: 'Sisi luar paha atas kanan', zone: 'paha' },
 
   // Zona Lengan (Upper Arms)
-  { id: 'LA', code: 'LA', name: 'Lengan Kiri (LA)', subText: 'Trisep / sisi belakang lengan kiri', zone: 'lengan' },
-  { id: 'RA', code: 'RA', name: 'Lengan Kanan (RA)', subText: 'Trisep / sisi belakang lengan kanan', zone: 'lengan' },
+  { id: 'LKi', code: 'LKi', name: 'Lengan Kiri (LKi)', subText: 'Trisep / sisi belakang lengan kiri', zone: 'lengan' },
+  { id: 'LKn', code: 'LKn', name: 'Lengan Kanan (LKn)', subText: 'Trisep / sisi belakang lengan kanan', zone: 'lengan' },
 
   // Zona Bokong (Glutes)
-  { id: 'LG', code: 'LG', name: 'Bokong Kiri (LG)', subText: 'Kuadran atas luar bokong kiri', zone: 'bokong' },
-  { id: 'RG', code: 'RG', name: 'Bokong Kanan (RG)', subText: 'Kuadran atas luar bokong kanan', zone: 'bokong' },
+  { id: 'BKi', code: 'BKi', name: 'Bokong Kiri (BKi)', subText: 'Kuadran atas luar bokong kiri', zone: 'bokong' },
+  { id: 'BKn', code: 'BKn', name: 'Bokong Kanan (BKn)', subText: 'Kuadran atas luar bokong kanan', zone: 'bokong' },
 ];
 
 export const RotationScreen: React.FC = () => {
@@ -53,9 +54,10 @@ export const RotationScreen: React.FC = () => {
   const activeZoneSites = ALL_SITES.filter((s) => s.zone === selectedZone);
 
   const getSiteLastUsed = (siteId: string) => {
-    const log = injectionHistory.find((h) => h.siteId === siteId);
+    const history = Array.isArray(injectionHistory) ? injectionHistory : [];
+    const log = history.find((h) => h?.siteId === siteId);
     if (!log) return 'Belum ada log';
-    return log.timestamp;
+    return log.timestamp || 'Baru saja';
   };
 
   const handleNextRotation = () => {
@@ -111,109 +113,226 @@ export const RotationScreen: React.FC = () => {
         ))}
       </View>
 
-      {/* Peta Visual Anatomi */}
+      {/* Peta Visual Anatomi Vektor SVG */}
       <View style={styles.visualMapCard}>
-        <View style={styles.torsoOutline}>
-          {selectedZone === 'perut' && (
-            <View style={styles.gridOverlay}>
-              <View style={styles.navelCircle}>
-                <Text style={styles.navelText}>PUSAR</Text>
-              </View>
+        <Text style={styles.mapHeaderTitle}>DIAGRAM SILUET ANATOMI ({selectedZone.toUpperCase()})</Text>
+        <View style={styles.svgContainer}>
+          <Svg height="190" width="100%" viewBox="0 0 300 180">
+            {/* Perut / Abdomen Zone */}
+            {selectedZone === 'perut' && (
+              <G>
+                {/* Torso Outline */}
+                <Path
+                  d="M100 20 Q150 10 200 20 L210 160 Q150 170 90 160 Z"
+                  fill="#090d16"
+                  stroke="#1e293b"
+                  strokeWidth="2"
+                />
+                {/* Pusar (Navel) */}
+                <Circle cx="150" cy="90" r="12" fill="#030712" stroke="#38bdf8" strokeWidth="1.5" />
+                <SvgText x="150" y="93" fill="#38bdf8" fontSize="8" fontWeight="bold" textAnchor="middle">
+                  PUSAR
+                </SvgText>
 
-              <View style={styles.rowQuadrant}>
-                <TouchableOpacity
-                  onPress={() => setSite('TR')}
-                  style={[styles.mapPoint, currentSite === 'TR' && styles.mapPointActive]}
-                >
-                  <Text style={[styles.mapPointCode, currentSite === 'TR' && styles.mapPointCodeActive]}>TR</Text>
-                  <Text style={styles.mapPointLabel}>Kanan Atas</Text>
-                </TouchableOpacity>
+                {/* Kuadran KA (Kanan Atas) */}
+                <G onPress={() => setSite('KA')} style={{ cursor: 'pointer' }}>
+                  <Rect
+                    x="105"
+                    y="35"
+                    width="38"
+                    height="42"
+                    rx="8"
+                    fill={currentSite === 'KA' ? 'rgba(16, 185, 129, 0.2)' : '#0f172a'}
+                    stroke={currentSite === 'KA' ? '#10b981' : '#334155'}
+                    strokeWidth={currentSite === 'KA' ? '2' : '1'}
+                  />
+                  <SvgText x="124" y="52" fill={currentSite === 'KA' ? '#10b981' : '#ffffff'} fontSize="11" fontWeight="bold" textAnchor="middle">
+                    KA
+                  </SvgText>
+                  <SvgText x="124" y="65" fill="#94a3b8" fontSize="7" textAnchor="middle">
+                    Kanan Atas
+                  </SvgText>
+                </G>
 
-                <TouchableOpacity
-                  onPress={() => setSite('TL')}
-                  style={[styles.mapPoint, currentSite === 'TL' && styles.mapPointActive]}
-                >
-                  <Text style={[styles.mapPointCode, currentSite === 'TL' && styles.mapPointCodeActive]}>TL</Text>
-                  <Text style={styles.mapPointLabel}>Kiri Atas</Text>
-                </TouchableOpacity>
-              </View>
+                {/* Kuadran KiA (Kiri Atas) */}
+                <G onPress={() => setSite('KiA')}>
+                  <Rect
+                    x="157"
+                    y="35"
+                    width="38"
+                    height="42"
+                    rx="8"
+                    fill={currentSite === 'KiA' ? 'rgba(16, 185, 129, 0.2)' : '#0f172a'}
+                    stroke={currentSite === 'KiA' ? '#10b981' : '#334155'}
+                    strokeWidth={currentSite === 'KiA' ? '2' : '1'}
+                  />
+                  <SvgText x="176" y="52" fill={currentSite === 'KiA' ? '#10b981' : '#ffffff'} fontSize="11" fontWeight="bold" textAnchor="middle">
+                    KiA
+                  </SvgText>
+                  <SvgText x="176" y="65" fill="#94a3b8" fontSize="7" textAnchor="middle">
+                    Kiri Atas
+                  </SvgText>
+                </G>
 
-              <View style={styles.rowQuadrant}>
-                <TouchableOpacity
-                  onPress={() => setSite('BR')}
-                  style={[styles.mapPoint, currentSite === 'BR' && styles.mapPointActive]}
-                >
-                  <Text style={[styles.mapPointCode, currentSite === 'BR' && styles.mapPointCodeActive]}>BR</Text>
-                  <Text style={styles.mapPointLabel}>Kanan Bawah</Text>
-                </TouchableOpacity>
+                {/* Kuadran KB (Kanan Bawah) */}
+                <G onPress={() => setSite('KB')}>
+                  <Rect
+                    x="105"
+                    y="105"
+                    width="38"
+                    height="42"
+                    rx="8"
+                    fill={currentSite === 'KB' ? 'rgba(16, 185, 129, 0.2)' : '#0f172a'}
+                    stroke={currentSite === 'KB' ? '#10b981' : '#334155'}
+                    strokeWidth={currentSite === 'KB' ? '2' : '1'}
+                  />
+                  <SvgText x="124" y="122" fill={currentSite === 'KB' ? '#10b981' : '#ffffff'} fontSize="11" fontWeight="bold" textAnchor="middle">
+                    KB
+                  </SvgText>
+                  <SvgText x="124" y="135" fill="#94a3b8" fontSize="7" textAnchor="middle">
+                    Kanan Bawah
+                  </SvgText>
+                </G>
 
-                <TouchableOpacity
-                  onPress={() => setSite('BL')}
-                  style={[styles.mapPoint, currentSite === 'BL' && styles.mapPointActive]}
-                >
-                  <Text style={[styles.mapPointCode, currentSite === 'BL' && styles.mapPointCodeActive]}>BL</Text>
-                  <Text style={styles.mapPointLabel}>Kiri Bawah</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
+                {/* Kuadran KiB (Kiri Bawah) */}
+                <G onPress={() => setSite('KiB')}>
+                  <Rect
+                    x="157"
+                    y="105"
+                    width="38"
+                    height="42"
+                    rx="8"
+                    fill={currentSite === 'KiB' ? 'rgba(16, 185, 129, 0.2)' : '#0f172a'}
+                    stroke={currentSite === 'KiB' ? '#10b981' : '#334155'}
+                    strokeWidth={currentSite === 'KiB' ? '2' : '1'}
+                  />
+                  <SvgText x="176" y="122" fill={currentSite === 'KiB' ? '#10b981' : '#ffffff'} fontSize="11" fontWeight="bold" textAnchor="middle">
+                    KiB
+                  </SvgText>
+                  <SvgText x="176" y="135" fill="#94a3b8" fontSize="7" textAnchor="middle">
+                    Kiri Bawah
+                  </SvgText>
+                </G>
+              </G>
+            )}
 
-          {selectedZone === 'paha' && (
-            <View style={styles.limbsRow}>
-              <TouchableOpacity
-                onPress={() => setSite('LT')}
-                style={[styles.limbBtn, currentSite === 'LT' && styles.mapPointActive]}
-              >
-                <Text style={[styles.mapPointCode, currentSite === 'LT' && styles.mapPointCodeActive]}>LT</Text>
-                <Text style={styles.mapPointLabel}>Paha Kiri Luar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setSite('RT')}
-                style={[styles.limbBtn, currentSite === 'RT' && styles.mapPointActive]}
-              >
-                <Text style={[styles.mapPointCode, currentSite === 'RT' && styles.mapPointCodeActive]}>RT</Text>
-                <Text style={styles.mapPointLabel}>Paha Kanan Luar</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+            {/* Paha / Thighs Zone */}
+            {selectedZone === 'paha' && (
+              <G>
+                <Rect
+                  x="70"
+                  y="20"
+                  width="70"
+                  height="140"
+                  rx="16"
+                  fill={currentSite === 'PKi' ? 'rgba(16, 185, 129, 0.2)' : '#0f172a'}
+                  stroke={currentSite === 'PKi' ? '#10b981' : '#334155'}
+                  strokeWidth={currentSite === 'PKi' ? '2' : '1'}
+                />
+                <SvgText x="105" y="80" fill={currentSite === 'PKi' ? '#10b981' : '#ffffff'} fontSize="13" fontWeight="bold" textAnchor="middle">
+                  PKi
+                </SvgText>
+                <SvgText x="105" y="98" fill="#94a3b8" fontSize="9" textAnchor="middle">
+                  Paha Kiri Luar
+                </SvgText>
 
-          {selectedZone === 'lengan' && (
-            <View style={styles.limbsRow}>
-              <TouchableOpacity
-                onPress={() => setSite('LA')}
-                style={[styles.limbBtn, currentSite === 'LA' && styles.mapPointActive]}
-              >
-                <Text style={[styles.mapPointCode, currentSite === 'LA' && styles.mapPointCodeActive]}>LA</Text>
-                <Text style={styles.mapPointLabel}>Lengan Kiri Belakang</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setSite('RA')}
-                style={[styles.limbBtn, currentSite === 'RA' && styles.mapPointActive]}
-              >
-                <Text style={[styles.mapPointCode, currentSite === 'RA' && styles.mapPointCodeActive]}>RA</Text>
-                <Text style={styles.mapPointLabel}>Lengan Kanan Belakang</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+                <Rect
+                  x="160"
+                  y="20"
+                  width="70"
+                  height="140"
+                  rx="16"
+                  fill={currentSite === 'PKn' ? 'rgba(16, 185, 129, 0.2)' : '#0f172a'}
+                  stroke={currentSite === 'PKn' ? '#10b981' : '#334155'}
+                  strokeWidth={currentSite === 'PKn' ? '2' : '1'}
+                />
+                <SvgText x="195" y="80" fill={currentSite === 'PKn' ? '#10b981' : '#ffffff'} fontSize="13" fontWeight="bold" textAnchor="middle">
+                  PKn
+                </SvgText>
+                <SvgText x="195" y="98" fill="#94a3b8" fontSize="9" textAnchor="middle">
+                  Paha Kanan Luar
+                </SvgText>
+              </G>
+            )}
 
-          {selectedZone === 'bokong' && (
-            <View style={styles.limbsRow}>
-              <TouchableOpacity
-                onPress={() => setSite('LG')}
-                style={[styles.limbBtn, currentSite === 'LG' && styles.mapPointActive]}
-              >
-                <Text style={[styles.mapPointCode, currentSite === 'LG' && styles.mapPointCodeActive]}>LG</Text>
-                <Text style={styles.mapPointLabel}>Bokong Kiri Atas</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setSite('RG')}
-                style={[styles.limbBtn, currentSite === 'RG' && styles.mapPointActive]}
-              >
-                <Text style={[styles.mapPointCode, currentSite === 'RG' && styles.mapPointCodeActive]}>RG</Text>
-                <Text style={styles.mapPointLabel}>Bokong Kanan Atas</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+            {/* Lengan / Upper Arms Zone */}
+            {selectedZone === 'lengan' && (
+              <G>
+                <Rect
+                  x="75"
+                  y="25"
+                  width="65"
+                  height="130"
+                  rx="14"
+                  fill={currentSite === 'LKi' ? 'rgba(16, 185, 129, 0.2)' : '#0f172a'}
+                  stroke={currentSite === 'LKi' ? '#10b981' : '#334155'}
+                  strokeWidth={currentSite === 'LKi' ? '2' : '1'}
+                />
+                <SvgText x="107" y="80" fill={currentSite === 'LKi' ? '#10b981' : '#ffffff'} fontSize="13" fontWeight="bold" textAnchor="middle">
+                  LKi
+                </SvgText>
+                <SvgText x="107" y="98" fill="#94a3b8" fontSize="8" textAnchor="middle">
+                  Lengan Kiri
+                </SvgText>
+
+                <Rect
+                  x="160"
+                  y="25"
+                  width="65"
+                  height="130"
+                  rx="14"
+                  fill={currentSite === 'LKn' ? 'rgba(16, 185, 129, 0.2)' : '#0f172a'}
+                  stroke={currentSite === 'LKn' ? '#10b981' : '#334155'}
+                  strokeWidth={currentSite === 'LKn' ? '2' : '1'}
+                />
+                <SvgText x="192" y="80" fill={currentSite === 'LKn' ? '#10b981' : '#ffffff'} fontSize="13" fontWeight="bold" textAnchor="middle">
+                  LKn
+                </SvgText>
+                <SvgText x="192" y="98" fill="#94a3b8" fontSize="8" textAnchor="middle">
+                  Lengan Kanan
+                </SvgText>
+              </G>
+            )}
+
+            {/* Bokong / Glutes Zone */}
+            {selectedZone === 'bokong' && (
+              <G>
+                <Rect
+                  x="70"
+                  y="25"
+                  width="70"
+                  height="130"
+                  rx="16"
+                  fill={currentSite === 'BKi' ? 'rgba(16, 185, 129, 0.2)' : '#0f172a'}
+                  stroke={currentSite === 'BKi' ? '#10b981' : '#334155'}
+                  strokeWidth={currentSite === 'BKi' ? '2' : '1'}
+                />
+                <SvgText x="105" y="80" fill={currentSite === 'BKi' ? '#10b981' : '#ffffff'} fontSize="13" fontWeight="bold" textAnchor="middle">
+                  BKi
+                </SvgText>
+                <SvgText x="105" y="98" fill="#94a3b8" fontSize="9" textAnchor="middle">
+                  Bokong Kiri
+                </SvgText>
+
+                <Rect
+                  x="160"
+                  y="25"
+                  width="70"
+                  height="130"
+                  rx="16"
+                  fill={currentSite === 'BKn' ? 'rgba(16, 185, 129, 0.2)' : '#0f172a'}
+                  stroke={currentSite === 'BKn' ? '#10b981' : '#334155'}
+                  strokeWidth={currentSite === 'BKn' ? '2' : '1'}
+                />
+                <SvgText x="195" y="80" fill={currentSite === 'BKn' ? '#10b981' : '#ffffff'} fontSize="13" fontWeight="bold" textAnchor="middle">
+                  BKn
+                </SvgText>
+                <SvgText x="195" y="98" fill="#94a3b8" fontSize="9" textAnchor="middle">
+                  Bokong Kanan
+                </SvgText>
+              </G>
+            )}
+          </Svg>
         </View>
       </View>
 
@@ -387,90 +506,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1e293b',
     borderRadius: 14,
-    padding: 16,
-    alignItems: 'center',
-  },
-  torsoOutline: {
-    width: '100%',
-    minHeight: 180,
-    backgroundColor: '#030712',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#1e293b',
     padding: 14,
-    justifyContent: 'center',
+    gap: 8,
   },
-  gridOverlay: {
-    gap: 16,
-    position: 'relative',
-  },
-  navelCircle: {
-    position: 'absolute',
-    top: '44%',
-    left: '42%',
-    width: 50,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#0f172a',
-    borderWidth: 1,
-    borderColor: '#38bdf8',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-  },
-  navelText: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: '#38bdf8',
-  },
-  rowQuadrant: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  mapPoint: {
-    width: 90,
-    height: 70,
-    borderRadius: 12,
-    backgroundColor: '#090d16',
-    borderWidth: 1,
-    borderColor: '#1e293b',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  mapPointActive: {
-    borderColor: '#10b981',
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-  },
-  mapPointCode: {
-    fontSize: 13,
+  mapHeaderTitle: {
+    fontSize: 10,
     fontWeight: '800',
     color: '#64748b',
+    letterSpacing: 0.5,
   },
-  mapPointCodeActive: {
-    color: '#10b981',
-  },
-  mapPointLabel: {
-    fontSize: 9,
-    color: '#94a3b8',
-    fontWeight: '600',
-  },
-  limbsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 20,
-    gap: 12,
-  },
-  limbBtn: {
-    flex: 1,
-    height: 80,
+  svgContainer: {
+    backgroundColor: '#030712',
     borderRadius: 12,
-    backgroundColor: '#090d16',
     borderWidth: 1,
     borderColor: '#1e293b',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    paddingVertical: 8,
   },
   sectionHeaderTitle: {
     fontSize: 10,
