@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   SafeAreaView,
   StatusBar,
@@ -7,13 +7,14 @@ import {
   Text,
   TouchableOpacity,
   Platform,
+  Image,
 } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import {
   FlaskConical,
   RotateCw,
   History,
   Snowflake,
-  Activity,
 } from 'lucide-react-native';
 
 import { InventoryScreen } from './src/screens/InventoryScreen';
@@ -22,8 +23,46 @@ import { HistoryScreen } from './src/screens/HistoryScreen';
 import { FreezerScreen } from './src/screens/FreezerScreen';
 import { FloatingAIChat } from './src/components/FloatingAIChat';
 
+// Konfigurasi handler notifikasi lokal internal
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<'inventory' | 'rotation' | 'history' | 'freezer'>('inventory');
+
+  // Pemicu Izin Notifikasi Sistem iOS saat Startup
+  useEffect(() => {
+    async function requestNotificationPermissions() {
+      try {
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+
+        if (existingStatus !== 'granted') {
+          const { status } = await Notifications.requestPermissionsAsync({
+            ios: {
+              allowAlert: true,
+              allowBadge: true,
+              allowSound: true,
+              allowDisplayInCarPlay: false,
+              allowCriticalAlerts: false,
+              provideAppNotificationSettings: true,
+              allowProvisional: true,
+            },
+          });
+          finalStatus = status;
+        }
+      } catch (error) {
+        // Fallback aman jika berjalan pada simulator tanpa modul notifikasi
+      }
+    }
+
+    requestNotificationPermissions();
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -32,8 +71,13 @@ export default function App() {
       {/* Header Utama BioStack PRO */}
       <View style={styles.topHeader}>
         <View style={styles.brandingRow}>
+          {/* Logo Asli Aplikasi dari assets/icon.png */}
           <View style={styles.brandIconBox}>
-            <Activity size={20} color="#10b981" />
+            <Image
+              source={require('./assets/icon.png')}
+              style={styles.brandIconImage}
+              resizeMode="cover"
+            />
           </View>
           <View>
             <View style={styles.titleWithBadge}>
@@ -122,14 +166,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   brandIconBox: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     borderRadius: 10,
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: '#090d16',
+    overflow: 'hidden',
+  },
+  brandIconImage: {
+    width: '100%',
+    height: '100%',
   },
   titleWithBadge: {
     flexDirection: 'row',
