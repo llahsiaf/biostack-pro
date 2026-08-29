@@ -35,7 +35,7 @@ Notifications.setNotificationHandler({
 export default function App() {
   const [activeTab, setActiveTab] = useState<'inventory' | 'rotation' | 'history' | 'freezer'>('inventory');
 
-  // Pemicu Izin Notifikasi Sistem iOS saat Startup
+  // Mendaftarkan Izin Notifikasi ke Sistem iOS
   useEffect(() => {
     async function requestNotificationPermissions() {
       try {
@@ -57,7 +57,7 @@ export default function App() {
           finalStatus = status;
         }
       } catch (error) {
-        // Fallback aman jika berjalan pada simulator tanpa modul notifikasi
+        // Fallback aman untuk simulator
       }
     }
 
@@ -71,10 +71,10 @@ export default function App() {
       {/* Header Utama BioStack PRO */}
       <View style={styles.topHeader}>
         <View style={styles.brandingRow}>
-          {/* Logo Asli Aplikasi dari assets/icon.png */}
+          {/* Memanggil icon.png dari direktori root */}
           <View style={styles.brandIconBox}>
             <Image
-              source={require('./assets/icon.png')}
+              source={require('./icon.png')}
               style={styles.brandIconImage}
               resizeMode="cover"
             />
@@ -134,7 +134,7 @@ export default function App() {
         </TouchableOpacity>
       </View>
 
-      {/* Konten Layar Aktif */}
+      {/* Tampilan Konten Layar Aktif */}
       <View style={styles.mainContent}>
         {activeTab === 'inventory' && <InventoryScreen />}
         {activeTab === 'rotation' && <RotationScreen />}
@@ -142,7 +142,7 @@ export default function App() {
         {activeTab === 'freezer' && <FreezerScreen />}
       </View>
 
-      {/* Tombol Melayang AI Chat */}
+      {/* Tombol AI Chat Assistant Melayang */}
       <FloatingAIChat />
     </SafeAreaView>
   );
