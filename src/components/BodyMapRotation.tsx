@@ -1,146 +1,107 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import Svg, {
-  Defs,
-  LinearGradient,
-  RadialGradient,
-  Stop,
-  Path,
-  Line,
-  Circle,
-  G,
-  Text as SvgText,
-} from 'react-native-svg';
-import { INJECTION_SITES } from '../database/defaultPeptides';
+import Svg, { Circle, Ellipse, Path, G, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { INJECTION_SITES } from '../database/injectionSites';
+import { useBioStackStore } from '../store/useBioStackStore';
 
-interface BodyMapRotationProps {
-  currentSiteIndex: number;
-  onSelectSite: (index: number) => void;
-}
+export const BodyMapRotation: React.FC = () => {
+  const { currentSite } = useBioStackStore();
 
-export const BodyMapRotation: React.FC<BodyMapRotationProps> = ({
-  currentSiteIndex,
-  onSelectSite,
-}) => {
+  const getSiteLabel = (siteId: string) => {
+    const labels: Record<string, string> = {
+      KA: 'Kanan Atas', KiA: 'Kiri Atas', KB: 'Kanan Bawah', KiB: 'Kiri Bawah',
+      PKi: 'Paha Kiri', PKn: 'Paha Kanan',
+      LKi: 'Lengan Kiri', LKn: 'Lengan Kanan',
+      BKi: 'Bokong Kiri', BKn: 'Bokong Kanan',
+    };
+    return labels[siteId] || siteId;
+  };
+
   return (
     <View style={styles.container}>
-      <Svg width="100%" height={260} viewBox="0 0 320 320">
-        <Defs>
-          <LinearGradient id="torsoGrad" x1="160" y1="20" x2="160" y2="300" gradientUnits="userSpaceOnUse">
-            <Stop offset="0%" stopColor="#0f172a" stopOpacity="0.9" />
-            <Stop offset="50%" stopColor="#111c33" stopOpacity="0.7" />
-            <Stop offset="100%" stopColor="#090d16" stopOpacity="0.95" />
-          </LinearGradient>
+      <View style={styles.headerCard}>
+        <Text style={styles.headerTitle}>Peta Anatomi Rotasi Injeksi</Text>
+        <Text style={styles.headerSub}>
+          Titik aktif: <Text style={styles.headerHighlight}>{getSiteLabel(currentSite)}</Text>
+        </Text>
+      </View>
 
-          <RadialGradient id="targetGlow" cx="50%" cy="50%" r="50%">
-            <Stop offset="0%" stopColor="#10b981" stopOpacity="0.6" />
-            <Stop offset="60%" stopColor="#06b6d4" stopOpacity="0.25" />
-            <Stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
-          </RadialGradient>
-        </Defs>
+      <View style={styles.svgCard}>
+        <Svg height="300" width="320" viewBox="0 0 320 300">
+          <Defs>
+            <LinearGradient id="torsoGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#1e293b" stopOpacity="1" />
+              <Stop offset="1" stopColor="#0f172a" stopOpacity="1" />
+            </LinearGradient>
+            <LinearGradient id="activeGlow" x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0" stopColor="#10b981" stopOpacity="0.4" />
+              <Stop offset="1" stopColor="#06b6d4" stopOpacity="0.4" />
+            </LinearGradient>
+          </Defs>
 
-        {/* Torso Outer Contour */}
-        <Path
-          d="M 65,30 C 85,85 75,135 60,185 C 50,225 65,275 90,295 L 230,295 C 255,275 270,225 260,185 C 245,135 235,85 255,30 Z"
-          fill="url(#torsoGrad)"
-          stroke="#1e293b"
-          strokeWidth="2.5"
-        />
+          {/* Torso Base */}
+          <G>
+            <Ellipse cx="160" cy="85" rx="55" ry="65" fill="url(#torsoGrad)" stroke="#334155" strokeWidth="2" />
+            <Path d="M 105 85 Q 160 160 215 85" fill="none" stroke="#334155" strokeWidth="1.5" />
+            <Path d="M 160 20 L 160 150" fill="none" stroke="#334155" strokeWidth="1.5" strokeDasharray="4,4" />
+            
+            {/* Navel */}
+            <Circle cx="160" cy="85" r="4" fill="#334155" />
+            <Circle cx="160" cy="85" r="2" fill="#0f172a" />
+          </G>
 
-        {/* Rib Cage Margin Guides */}
-        <Path
-          d="M 95,55 C 130,95 160,95 160,95 C 160,95 190,95 225,55"
-          stroke="#1e293b"
-          strokeWidth="2"
-          strokeDasharray="4 4"
-          strokeLinecap="round"
-        />
-
-        {/* Pelvic Hip Contours */}
-        <Path
-          d="M 75,245 C 110,275 160,275 160,275 C 160,275 210,275 245,245"
-          stroke="#1e293b"
-          strokeWidth="2"
-          strokeDasharray="4 4"
-          strokeLinecap="round"
-        />
-
-        {/* Linea Alba & Transumbilical Reference Lines */}
-        <Line x1="160" y1="50" x2="160" y2="275" stroke="#162035" strokeWidth="1.5" strokeDasharray="3 3" />
-        <Line x1="70" y1="160" x2="250" y2="160" stroke="#162035" strokeWidth="1.5" strokeDasharray="3 3" />
-
-        {/* Safe Distance Ring Buffer */}
-        <Circle cx="160" cy="160" r="32" stroke="#f59e0b" strokeWidth="1" strokeDasharray="2 3" opacity="0.4" />
-
-        {/* Belly Button (Umbilicus) */}
-        <Circle cx="160" cy="160" r="10" fill="#090d16" stroke="#06b6d4" strokeWidth="2" />
-        <Circle cx="160" cy="160" r="4" fill="#06b6d4" />
-        <SvgText x="160" y="145" textAnchor="middle" fill="#64748b" fontSize="8" fontWeight="800">
-          PUSAR
-        </SvgText>
-
-        {/* 4 Quadrants Interactive Targets */}
-        {INJECTION_SITES.map((site, idx) => {
-          const isCurrent = idx === currentSiteIndex;
-          return (
-            <G key={site.id} onPress={() => onSelectSite(idx)}>
-              {isCurrent && (
-                <>
-                  <Circle cx={site.cx} cy={site.cy} r="34" fill="url(#targetGlow)" />
-                  <Circle cx={site.cx} cy={site.cy} r="28" stroke="#10b981" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.9" />
-                </>
+          {/* Injection Sites */}
+          {INJECTION_SITES.map((site: any) => (
+            <G key={site.id}>
+              {site.id === currentSite && (
+                <Circle cx={site.cx} cy={site.cy} r={14} fill="url(#activeGlow)" />
               )}
-
               <Circle
                 cx={site.cx}
                 cy={site.cy}
-                r="22"
-                fill={isCurrent ? '#064e3b' : '#0e1424'}
-                stroke={isCurrent ? '#10b981' : '#1e293b'}
-                strokeWidth={isCurrent ? '2.5' : '1.5'}
+                r={site.id === currentSite ? 10 : 6}
+                fill={site.id === currentSite ? '#10b981' : '#1e293b'}
+                stroke={site.id === currentSite ? '#34d399' : '#475569'}
+                strokeWidth={site.id === currentSite ? 3 : 2}
               />
-
-              <Circle cx={site.cx} cy={site.cy} r="5" fill={isCurrent ? '#34d399' : '#334155'} />
-
               <SvgText
                 x={site.cx}
-                y={site.cy + 3}
+                y={site.cy + (site.id === currentSite ? 24 : 18)}
+                fill={site.id === currentSite ? '#10b981' : '#64748b'}
+                fontSize={site.id === currentSite ? 11 : 9}
+                fontWeight={site.id === currentSite ? 'bold' : 'normal'}
                 textAnchor="middle"
-                fill={isCurrent ? '#ffffff' : '#94a3b8'}
-                fontSize="9"
-                fontWeight="900"
-                fontFamily="monospace"
               >
                 {site.code}
               </SvgText>
-
-              <SvgText
-                x={site.cx}
-                y={site.cy + 32}
-                textAnchor="middle"
-                fill={isCurrent ? '#34d399' : '#64748b'}
-                fontSize="8"
-                fontWeight="700"
-              >
-                {site.name.split(' ')[0]} {site.name.split(' ')[1]}
-              </SvgText>
             </G>
-          );
-        })}
-      </Svg>
+          ))}
+        </Svg>
+      </View>
+
+      <View style={styles.legendContainer}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: '#10b981' }]} />
+          <Text style={styles.legendText}>Titik Aktif ({getSiteLabel(currentSite)})</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: '#1e293b', borderColor: '#475569', borderWidth: 2 }]} />
+          <Text style={styles.legendText}>Tersedia untuk Rotasi</Text>
+        </View>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: '#070b14',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#1e293b',
-    padding: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 6,
-  },
+  container: { padding: 14, gap: 12 },
+  headerCard: { backgroundColor: '#090d16', borderRadius: 12, borderWidth: 1, borderColor: '#1e293b', padding: 14, gap: 4 },
+  headerTitle: { fontSize: 14, fontWeight: '900', color: '#ffffff' },
+  headerSub: { fontSize: 11, color: '#94a3b8' },
+  headerHighlight: { color: '#10b981', fontWeight: '800' },
+  svgCard: { backgroundColor: '#090d16', borderRadius: 14, borderWidth: 1, borderColor: '#1e293b', alignItems: 'center', justifyContent: 'center', paddingVertical: 10 },
+  legendContainer: { flexDirection: 'row', gap: 16, justifyContent: 'center', marginTop: 4 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot: { width: 10, height: 10, borderRadius: 5 },
+  legendText: { fontSize: 10, color: '#94a3b8', fontWeight: '600' },
 });
