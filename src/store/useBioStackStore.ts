@@ -1,184 +1,235 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ActiveInventoryItem, FreezerStockItem, InjectionLog } from '../types';
-import { INITIAL_FREEZER_ITEMS, INJECTION_SITES } from '../database/defaultPeptides';
+import { DEFAULT_PEPTIDES } from '../database/defaultPeptides';
 
-interface BioStackState {
-  inventory: ActiveInventoryItem[];
-  freezerItems: FreezerStockItem[];
-  injectionLogs: InjectionLog[];
-  currentSiteIndex: number;
-  selectedPeptideId: string | null;
-  isLoaded: boolean;
-
-  loadStorageData: () => Promise<void>;
-  addActiveItem: (item: ActiveInventoryItem) => void;
-  updateActiveItem: (id: string, partial: Partial<ActiveInventoryItem>) => void;
-  removeActiveItem: (id: string) => void;
-  updateFreezerStock: (id: string, delta: number) => void;
-  addFreezerItem: (item: FreezerStockItem) => void;
-  removeFreezerItem: (id: string) => void;
-  recordInjection: (item: ActiveInventoryItem) => void;
-  advanceSiteRotation: () => void;
-  setSiteIndex: (index: number) => void;
-  setSelectedPeptideId: (id: string | null) => void;
-  resetToDefaults: () => Promise<void>;
-  clearLogs: () => void;
+export interface InventoryItem {
+  id: string;
+  name: string;
+  category: string;
+  vialSize: number;
+  unit: 'mg' | 'mcg' | 'mL';
+  bacWater: number;
+  targetDose: number;
+  doseUnit: 'mg' | 'mcg' | 'mL';
+  volumeMl?: string;
+  frequency: string;
+  frequencyLabel: string;
+  halfLifeDays: number;
+  maxFridgeDays: number;
+  activeDays: string[];
+  injectionTime: string;
+  reconstitutedDate?: string;
+  estimatedDaysLeft?: number;
+  isCycleActive?: boolean;
+  isReminderActive?: boolean;
 }
 
-const STORAGE_KEYS = {
-  INVENTORY: '@biostack_inventory_v2',
-  FREEZER: '@biostack_freezer_v2',
-  LOGS: '@biostack_logs_v2',
-  SITE_INDEX: '@biostack_site_index_v2',
-};
+export interface FreezerItem {
+  id: string;
+  name: string;
+  category: string;
+  vialSize: number;
+  unit: 'mg' | 'mcg' | 'mL';
+  quantity: number;
+  defaultBacWater: number;
+  targetDose: number;
+  frequency: string;
+  frequencyLabel: string;
+  halfLifeDays: number;
+  maxFridgeDays: number;
+  activeDays: string[];
+  injectionTime: string;
+}
 
-export const useBioStackStore = create<BioStackState>((set, get) => ({
-  inventory: [],
-  freezerItems: INITIAL_FREEZER_ITEMS,
-  injectionLogs: [],
-  currentSiteIndex: 0,
-  selectedPeptideId: null,
-  isLoaded: false,
+export interface InjectionLog {
+  id: string;
+  peptideName: string;
+  dose: number;
+  unit: string;
+  volumeMl: string;
+  siteId: string;
+  timestamp: string;
+}
 
-  loadStorageData: async () => {
-    try {
-      const [invData, freezerData, logsData, siteData] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEYS.INVENTORY),
-        AsyncStorage.getItem(STORAGE_KEYS.FREEZER),
-        AsyncStorage.getItem(STORAGE_KEYS.LOGS),
-        AsyncStorage.getItem(STORAGE_KEYS.SITE_INDEX),
-      ]);
+interface BioStackState {
+  inventory: InventoryItem[];
+  freezerStock: FreezerItem[];
+  injectionHistory: InjectionLog[];
+  currentSite: string;
 
-      const inventory = invData ? JSON.parse(invData) : [];
-      const freezerItems = freezerData ? JSON.parse(freezerData) : INITIAL_FREEZER_ITEMS;
-      const injectionLogs = logsData ? JSON.parse(logsData) : [];
-      const currentSiteIndex = siteData ? parseInt(siteData, 10) : 0;
+  // Actions
+  setSite: (siteId: string) => void;
+  rotateToNextSite: () => void;
+  logInjection: (log: InjectionLog) => void;
+  deleteInjectionLog: (id: string) => void;
+  clearHistory: () => void;
 
-      set({
-        inventory,
-        freezerItems,
-        injectionLogs,
-        currentSiteIndex,
-        selectedPeptideId: inventory.length > 0 ? inventory[0].id : null,
-        isLoaded: true,
-      });
-    } catch (e) {
-      set({ isLoaded: true });
+  addFreezerItem: (item: FreezerItem) => void;
+  removeFreezerItem: (id: string) => void;
+  updateFreezerQuantity: (id: string, quantity: number) => void;
+
+  reconstituteToFridge: (freezerItemId: string, bacWater: number) => void;
+  removeInventoryItem: (id: string) => void;
+  updateInventoryItem: (id: string, updates: Partial<InventoryItem>) => void;
+}
+
+const ROTATION_SITES = ['TL', 'TR', 'BR', 'BL', 'LT', 'RT', 'LA', 'RA', 'LG', 'RG'];
+
+export const useBioStackStore = create<BioStackState>()(
+  persist(
+    (set, get) => ({
+      inventory: [
+        {
+          id: 'inv-1',
+          name: 'Retatrutide',
+          category: 'GLP-1 / GIP / GCG Tri-Agonist',
+          vialSize: 10,
+          unit: 'mg',
+          bacWater: 1.0,
+          targetDose: 2.0,
+          doseUnit: 'mg',
+          frequency: 'weekly',
+          frequencyLabel: 'Mingguan (Weekly)',
+          halfLifeDays: 6.0,
+          maxFridgeDays: 56,
+          activeDays: ['Sen'],
+          injectionTime: '08:00',
+          reconstitutedDate: '28 Agu 2026',
+          estimatedDaysLeft: 34,
+          isCycleActive: false,
+          isReminderActive: true,
+        },
+        {
+          id: 'inv-2',
+          name: 'GHK-Cu',
+          category: 'Tissue Repair / Anti-Aging',
+          vialSize: 50,
+          unit: 'mg',
+          bacWater: 3.0,
+          targetDose: 2.0,
+          doseUnit: 'mg',
+          frequency: 'daily',
+          frequencyLabel: 'Harian (Daily)',
+          halfLifeDays: 0.5,
+          maxFridgeDays: 28,
+          activeDays: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'],
+          injectionTime: '08:00',
+          reconstitutedDate: '28 Agu 2026',
+          estimatedDaysLeft: 24,
+          isCycleActive: false,
+          isReminderActive: true,
+        },
+      ],
+      freezerStock: DEFAULT_PEPTIDES.map((p) => ({
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        vialSize: p.defaultVialSize,
+        unit: p.vialUnit,
+        quantity: p.defaultStock,
+        defaultBacWater: p.defaultBacWater,
+        targetDose: p.targetDose,
+        frequency: p.frequency,
+        frequencyLabel: p.frequencyLabel,
+        halfLifeDays: p.halfLifeDays,
+        maxFridgeDays: p.maxFridgeDays,
+        activeDays: p.activeDays,
+        injectionTime: p.injectionTime,
+      })),
+      injectionHistory: [],
+      currentSite: 'TR',
+
+      setSite: (siteId) => set({ currentSite: siteId }),
+
+      rotateToNextSite: () => {
+        const current = get().currentSite;
+        const idx = ROTATION_SITES.indexOf(current);
+        const nextIdx = (idx + 1) % ROTATION_SITES.length;
+        set({ currentSite: ROTATION_SITES[nextIdx] });
+      },
+
+      logInjection: (log) =>
+        set((state) => ({
+          injectionHistory: [log, ...state.injectionHistory],
+        })),
+
+      deleteInjectionLog: (id) =>
+        set((state) => ({
+          injectionHistory: state.injectionHistory.filter((h) => h.id !== id),
+        })),
+
+      clearHistory: () => set({ injectionHistory: [] }),
+
+      addFreezerItem: (item) =>
+        set((state) => ({
+          freezerStock: [item, ...state.freezerStock],
+        })),
+
+      removeFreezerItem: (id) =>
+        set((state) => ({
+          freezerStock: state.freezerStock.filter((f) => f.id !== id),
+        })),
+
+      updateFreezerQuantity: (id, quantity) =>
+        set((state) => ({
+          freezerStock: state.freezerStock.map((f) =>
+            f.id === id ? { ...f, quantity } : f
+          ),
+        })),
+
+      reconstituteToFridge: (freezerItemId, bacWater) => {
+        const item = get().freezerStock.find((f) => f.id === freezerItemId);
+        if (!item || item.quantity <= 0) return;
+
+        const newInv: InventoryItem = {
+          id: `inv-${Date.now()}`,
+          name: item.name,
+          category: item.category,
+          vialSize: item.vialSize,
+          unit: item.unit,
+          bacWater: bacWater,
+          targetDose: item.targetDose,
+          doseUnit: item.unit,
+          frequency: item.frequency,
+          frequencyLabel: item.frequencyLabel,
+          halfLifeDays: item.halfLifeDays,
+          maxFridgeDays: item.maxFridgeDays,
+          activeDays: item.activeDays || ['Sen'],
+          injectionTime: item.injectionTime || '08:00',
+          reconstitutedDate: new Date().toLocaleDateString('id-ID', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+          }),
+          estimatedDaysLeft: Math.round(item.maxFridgeDays * 0.8),
+          isCycleActive: false,
+          isReminderActive: true,
+        };
+
+        set((state) => ({
+          freezerStock: state.freezerStock.map((f) =>
+            f.id === freezerItemId ? { ...f, quantity: f.quantity - 1 } : f
+          ),
+          inventory: [newInv, ...state.inventory],
+        }));
+      },
+
+      removeInventoryItem: (id) =>
+        set((state) => ({
+          inventory: state.inventory.filter((inv) => inv.id !== id),
+        })),
+
+      updateInventoryItem: (id, updates) =>
+        set((state) => ({
+          inventory: state.inventory.map((inv) =>
+            inv.id === id ? { ...inv, ...updates } : inv
+          ),
+        })),
+    }),
+    {
+      name: 'biostack-pro-store',
+      storage: createJSONStorage(() => AsyncStorage),
     }
-  },
-
-  addActiveItem: (item) => {
-    const updated = [item, ...get().inventory];
-    set({ inventory: updated, selectedPeptideId: item.id });
-    AsyncStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(updated));
-  },
-
-  updateActiveItem: (id, partial) => {
-    const updated = get().inventory.map((item) =>
-      item.id === id ? { ...item, ...partial } : item
-    );
-    set({ inventory: updated });
-    AsyncStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(updated));
-  },
-
-  removeActiveItem: (id) => {
-    const updated = get().inventory.filter((item) => item.id !== id);
-    const nextSelected = updated.length > 0 ? updated[0].id : null;
-    set({ inventory: updated, selectedPeptideId: nextSelected });
-    AsyncStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(updated));
-  },
-
-  updateFreezerStock: (id, delta) => {
-    const updated = get().freezerItems.map((item) =>
-      item.id === id
-        ? { ...item, freezerStock: Math.max(0, item.freezerStock + delta) }
-        : item
-    );
-    set({ freezerItems: updated });
-    AsyncStorage.setItem(STORAGE_KEYS.FREEZER, JSON.stringify(updated));
-  },
-
-  addFreezerItem: (item) => {
-    const updated = [...get().freezerItems, item];
-    set({ freezerItems: updated });
-    AsyncStorage.setItem(STORAGE_KEYS.FREEZER, JSON.stringify(updated));
-  },
-
-  removeFreezerItem: (id) => {
-    const updated = get().freezerItems.filter((item) => item.id !== id);
-    set({ freezerItems: updated });
-    AsyncStorage.setItem(STORAGE_KEYS.FREEZER, JSON.stringify(updated));
-  },
-
-  recordInjection: (item) => {
-    const dose = item.selectedDose;
-    const vialMg = item.vialSizeMg || 1;
-    const bacMl = item.bacWaterMl || (item.unit === 'mL' ? vialMg : 2.0);
-    const volMl = item.unit === 'mL' ? dose : (dose / vialMg) * bacMl;
-    const u100Units = Math.round(volMl * 100 * 10) / 10;
-    const clicks = Math.round(volMl * (item.penClicksPerMl || 100));
-
-    const site = INJECTION_SITES[get().currentSiteIndex];
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-    const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-
-    const newLog: InjectionLog = {
-      id: `log-${Date.now()}`,
-      peptideId: item.id,
-      peptideName: item.name,
-      dose,
-      unit: item.unit,
-      volMl,
-      u100Units,
-      clicks,
-      locationId: site.code,
-      locationName: site.name,
-      dateStr,
-      timeStr,
-      timestamp: now.toISOString(),
-    };
-
-    const updatedLogs = [newLog, ...get().injectionLogs];
-    const nextSite = (get().currentSiteIndex + 1) % INJECTION_SITES.length;
-
-    set({ injectionLogs: updatedLogs, currentSiteIndex: nextSite });
-    AsyncStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(updatedLogs));
-    AsyncStorage.setItem(STORAGE_KEYS.SITE_INDEX, nextSite.toString());
-  },
-
-  advanceSiteRotation: () => {
-    const next = (get().currentSiteIndex + 1) % INJECTION_SITES.length;
-    set({ currentSiteIndex: next });
-    AsyncStorage.setItem(STORAGE_KEYS.SITE_INDEX, next.toString());
-  },
-
-  setSiteIndex: (index) => {
-    set({ currentSiteIndex: index % INJECTION_SITES.length });
-    AsyncStorage.setItem(STORAGE_KEYS.SITE_INDEX, index.toString());
-  },
-
-  setSelectedPeptideId: (id) => set({ selectedPeptideId: id }),
-
-  resetToDefaults: async () => {
-    set({
-      inventory: [],
-      freezerItems: INITIAL_FREEZER_ITEMS,
-      injectionLogs: [],
-      currentSiteIndex: 0,
-      selectedPeptideId: null,
-    });
-    await Promise.all([
-      AsyncStorage.removeItem(STORAGE_KEYS.INVENTORY),
-      AsyncStorage.setItem(STORAGE_KEYS.FREEZER, JSON.stringify(INITIAL_FREEZER_ITEMS)),
-      AsyncStorage.removeItem(STORAGE_KEYS.LOGS),
-      AsyncStorage.setItem(STORAGE_KEYS.SITE_INDEX, '0'),
-    ]);
-  },
-
-  clearLogs: () => {
-    set({ injectionLogs: [] });
-    AsyncStorage.removeItem(STORAGE_KEYS.LOGS);
-  },
-}));
+  )
+);
