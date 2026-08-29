@@ -13,6 +13,15 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.biostack.pro",
       "icon": "./icon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./icon.png",
+          "color": "#10b981"
+        }
+      ]
+    ]
   }
 }
