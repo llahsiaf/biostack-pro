@@ -3,192 +3,219 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
+  FlatList,
   TextInput,
-  Alert,
   Modal,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
+  Alert,
 } from 'react-native';
 import {
   Snowflake,
   Plus,
   Minus,
-  FlaskConical,
-  Layers,
-  Search,
-  PlusCircle,
   Trash2,
+  Search,
   X,
   Check,
+  FlaskConical,
+  ChevronRight,
+  Info,
 } from 'lucide-react-native';
 import { useBioStackStore } from '../store/useBioStackStore';
-import { FreezerStockItem } from '../types';
-import { ReconstituteWizard } from '../components/ReconstituteWizard';
 
 export const FreezerScreen: React.FC = () => {
   const {
-    freezerItems,
-    updateFreezerStock,
+    freezerStock,
     addFreezerItem,
     removeFreezerItem,
-    addActiveItem,
+    updateFreezerQuantity,
+    reconstituteToFridge,
   } = useBioStackStore();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedItemForRecon, setSelectedItemForRecon] = useState<FreezerStockItem | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isReconstituteModalOpen, setIsReconstituteModalOpen] = useState(false);
+  const [selectedPeptide, setSelectedPeptide] = useState<any>(null);
 
-  // Form State Tambah Peptida Baru ke Freezer
+  // Form State Tambah Peptida Baru
   const [newName, setNewName] = useState('');
-  const [newSize, setNewSize] = useState('10');
+  const [newVialSize, setNewVialSize] = useState('10');
   const [newUnit, setNewUnit] = useState<'mg' | 'mcg' | 'mL'>('mg');
-  const [newCategory, setNewCategory] = useState('Biohacking Protocol');
   const [newStock, setNewStock] = useState('10');
-  const [newDefaultDose, setNewDefaultDose] = useState('1.0');
+  const [newTargetDose, setNewTargetDose] = useState('1.0');
+  const [newCategory, setNewCategory] = useState('Biohacking Protocol');
 
-  const totalVials = freezerItems.reduce((sum, item) => sum + item.freezerStock, 0);
+  // Form State Reconstitute (Pelarutan)
+  const [bacWaterInput, setBacWaterInput] = useState('2');
 
-  const filteredItems = freezerItems.filter(
-    (item) =>
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredStock = freezerStock.filter((item) =>
+    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleCreatePeptide = () => {
+  const totalVials = freezerStock.reduce((acc, curr) => acc + curr.quantity, 0);
+
+  const handleSaveNewPeptide = () => {
     if (!newName.trim()) {
-      Alert.alert('Data Kurang', 'Silakan masukkan nama peptida.');
+      Alert.alert('Peringatan', 'Nama peptida wajib diisi.');
       return;
     }
 
-    const newItem: FreezerStockItem = {
-      id: `freezer-custom-${Date.now()}`,
-      name: newName.trim(),
-      vialSizeMg: parseFloat(newSize) || 10,
-      unit: newUnit,
-      category: newCategory,
-      freezerStock: parseInt(newStock, 10) || 1,
-      bacWaterMl: newUnit === 'mL' ? 0 : 2.0,
-      defaultDose: parseFloat(newDefaultDose) || 1.0,
-      presetDoses: {
-        low: (parseFloat(newDefaultDose) || 1.0) * 0.5,
-        standard: parseFloat(newDefaultDose) || 1.0,
-        high: (parseFloat(newDefaultDose) || 1.0) * 2.0,
-      },
-      schedule: 'Mingguan (Weekly)',
-      injectionDays: ['Sen'],
-      penClicksPerMl: 100,
-      halfLifeHours: 24,
-    };
+    const vialSize = parseFloat(newVialSize) || 10;
+    const stockQty = parseInt(newStock, 10) || 1;
+    const targetDose = parseFloat(newTargetDose) || 1.0;
 
-    addFreezerItem(newItem);
-    setIsAddModalOpen(false);
+    addFreezerItem({
+      id: `pep-${Date.now()}`,
+      name: newName.trim(),
+      category: newCategory.trim() || 'General Protocol',
+      vialSize,
+      unit: newUnit,
+      quantity: stockQty,
+      defaultBacWater: 2.0,
+      targetDose,
+      frequency: 'weekly',
+      frequencyLabel: 'Mingguan (Weekly)',
+      halfLifeDays: 5.0,
+      maxFridgeDays: 28,
+      activeDays: ['Sen'],
+      injectionTime: '08:00',
+    });
+
     setNewName('');
-    Alert.alert('Sukses', `${newItem.name} berhasil ditambahkan ke stok freezer.`);
+    setNewVialSize('10');
+    setNewStock('10');
+    setNewTargetDose('1.0');
+    setIsAddModalOpen(false);
   };
 
-  const handleConfirmDelete = (id: string, name: string) => {
-    Alert.alert(
-      'Hapus Peptida Freezer',
-      `Hapus data stok ${name} secara permanen?`,
-      [
-        { text: 'Batal', style: 'cancel' },
-        { text: 'Hapus', style: 'destructive', onPress: () => removeFreezerItem(id) },
-      ]
-    );
+  const handleOpenReconstitute = (peptide: any) => {
+    setSelectedPeptide(peptide);
+    setBacWaterInput(peptide.defaultBacWater ? peptide.defaultBacWater.toString() : '2');
+    setIsReconstituteModalOpen(true);
+  };
+
+  const handleConfirmReconstitute = () => {
+    if (!selectedPeptide) return;
+    const bacWater = parseFloat(bacWaterInput) || 2.0;
+
+    reconstituteToFridge(selectedPeptide.id, bacWater);
+    setIsReconstituteModalOpen(false);
+    setSelectedPeptide(null);
+    Alert.alert('Sukses', `${selectedPeptide.name} berhasil dilarutkan dan dipindahkan ke Kulkas Aktif.`);
   };
 
   return (
-    <View style={styles.screen}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
-        {/* Header Stats Card */}
-        <View style={styles.headerCard}>
-          <View style={styles.headerTop}>
-            <View style={styles.headerIconWrap}>
-              <Snowflake size={18} color="#10b981" />
-            </View>
-            <View style={styles.headerTextWrap}>
-              <Text style={styles.headerTitle}>Freezer Lyophilized Stock</Text>
-              <Text style={styles.headerSubtitle}>
-                {freezerItems.length} Senyawa • {totalVials} Vial Padat Terkunci
-              </Text>
-            </View>
-          </View>
+    <View style={styles.container}>
+      {/* Banner Ringkasan Freezer */}
+      <View style={styles.summaryCard}>
+        <View style={styles.summaryIconBox}>
+          <Snowflake size={22} color="#10b981" />
+        </View>
+        <View style={styles.summaryContent}>
+          <Text style={styles.summaryTitle}>Freezer Lyophilized Stock</Text>
+          <Text style={styles.summarySubtitle}>
+            {freezerStock.length} Senyawa • {totalVials} Vial Padat Terkunci
+          </Text>
+        </View>
+      </View>
 
-          <TouchableOpacity onPress={() => setIsAddModalOpen(true)} style={styles.addPeptideBtn}>
-            <PlusCircle size={14} color="#022c22" />
-            <Text style={styles.addPeptideBtnText}>Tambah Senyawa Baru</Text>
+      {/* Tombol Tambah Peptida Baru */}
+      <TouchableOpacity
+        style={styles.addMainBtn}
+        onPress={() => setIsAddModalOpen(true)}
+      >
+        <Plus size={18} color="#022c22" />
+        <Text style={styles.addMainBtnText}>Tambah Peptida Baru</Text>
+      </TouchableOpacity>
+
+      {/* Bar Pencarian */}
+      <View style={styles.searchBar}>
+        <Search size={16} color="#64748b" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Cari peptida dalam freezer..."
+          placeholderTextColor="#475569"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <X size={16} color="#64748b" />
           </TouchableOpacity>
-        </View>
+        )}
+      </View>
 
-        {/* Search Bar */}
-        <View style={styles.searchBar}>
-          <Search size={14} color="#64748b" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Cari peptida dalam freezer..."
-            placeholderTextColor="#64748b"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-
-        {/* Freezer Peptide Stock List */}
-        {filteredItems.map((item) => (
-          <View key={item.id} style={styles.stockCard}>
-            <View style={styles.stockCardTop}>
-              <View style={styles.titleInfo}>
+      {/* Daftar Peptida di Freezer */}
+      <FlatList
+        data={filteredStock}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContainer}
+        showsVerticalScrollIndicator={false}
+        renderItem={({ item }) => (
+          <View style={styles.peptideCard}>
+            <View style={styles.cardHeader}>
+              <View style={styles.nameRow}>
                 <Text style={styles.peptideName}>{item.name}</Text>
-                <View style={styles.badgePill}>
-                  <Text style={styles.badgePillText}>
-                    {item.vialSizeMg} {item.unit}
+                <View style={styles.sizeBadge}>
+                  <Text style={styles.sizeBadgeText}>
+                    {item.vialSize} {item.unit}
                   </Text>
                 </View>
               </View>
-
               <TouchableOpacity
-                onPress={() => handleConfirmDelete(item.id, item.name)}
-                style={styles.trashBtn}
+                onPress={() => {
+                  Alert.alert(
+                    'Hapus Peptida',
+                    `Apakah Anda yakin ingin menghapus ${item.name} dari freezer?`,
+                    [
+                      { text: 'Batal', style: 'cancel' },
+                      { text: 'Hapus', style: 'destructive', onPress: () => removeFreezerItem(item.id) },
+                    ]
+                  );
+                }}
+                style={styles.deleteBtn}
               >
-                <Trash2 size={13} color="#475569" />
+                <Trash2 size={16} color="#64748b" />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.categoryLabel}>{item.category}</Text>
+            <Text style={styles.peptideCategory}>{item.category}</Text>
 
-            {/* Counter & Action Row */}
-            <View style={styles.counterRow}>
-              <View style={styles.stepperWrap}>
+            <View style={styles.cardActions}>
+              {/* Stepper Jumlah Vial */}
+              <View style={styles.stepperContainer}>
                 <TouchableOpacity
-                  onPress={() => updateFreezerStock(item.id, -1)}
+                  onPress={() => updateFreezerQuantity(item.id, Math.max(0, item.quantity - 1))}
                   style={styles.stepBtn}
                 >
-                  <Minus size={13} color="#94a3b8" />
+                  <Minus size={14} color="#94a3b8" />
                 </TouchableOpacity>
-
-                <View style={styles.stockValueWrap}>
-                  <Text style={styles.stockValue}>{item.freezerStock}</Text>
-                  <Text style={styles.stockUnit}>Vial</Text>
-                </View>
-
+                <Text style={styles.stepQty}>
+                  {item.quantity} <Text style={styles.stepUnit}>Vial</Text>
+                </Text>
                 <TouchableOpacity
-                  onPress={() => updateFreezerStock(item.id, 1)}
+                  onPress={() => updateFreezerQuantity(item.id, item.quantity + 1)}
                   style={styles.stepBtn}
                 >
-                  <Plus size={13} color="#94a3b8" />
+                  <Plus size={14} color="#94a3b8" />
                 </TouchableOpacity>
               </View>
 
-              {/* Reconstitute & Transfer to Fridge Button */}
+              {/* Tombol Larutkan ke Kulkas */}
               <TouchableOpacity
-                disabled={item.freezerStock <= 0}
-                onPress={() => setSelectedItemForRecon(item)}
-                style={[styles.reconBtn, item.freezerStock <= 0 && styles.reconBtnDisabled]}
+                disabled={item.quantity <= 0}
+                onPress={() => handleOpenReconstitute(item)}
+                style={[styles.reconstituteBtn, item.quantity <= 0 && styles.reconstituteBtnDisabled]}
               >
-                <FlaskConical size={13} color={item.freezerStock > 0 ? '#022c22' : '#64748b'} />
+                <FlaskConical size={14} color={item.quantity > 0 ? '#022c22' : '#64748b'} />
                 <Text
                   style={[
-                    styles.reconBtnText,
-                    item.freezerStock <= 0 && styles.reconBtnTextDisabled,
+                    styles.reconstituteBtnText,
+                    item.quantity <= 0 && styles.reconstituteBtnTextDisabled,
                   ]}
                 >
                   Larutkan ke Kulkas
@@ -196,54 +223,60 @@ export const FreezerScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-        ))}
-      </ScrollView>
+        )}
+      />
 
-      {/* Modal Tambah Peptida Manual */}
+      {/* Modal Tambah Peptida Baru (Keyboard Adaptive) */}
       <Modal visible={isAddModalOpen} animationType="slide" transparent>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalContent}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Tambah Stok Peptida Freezer</Text>
               <TouchableOpacity onPress={() => setIsAddModalOpen(false)}>
-                <X size={18} color="#94a3b8" />
+                <X size={20} color="#94a3b8" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.formScroll}>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Nama Peptida / Senyawa</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="Contoh: Epithalon, Thymosin Alpha-1"
-                  placeholderTextColor="#475569"
-                  value={newName}
-                  onChangeText={setNewName}
-                />
-              </View>
+            <ScrollView
+              contentContainerStyle={styles.modalScrollBody}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Text style={styles.inputLabel}>NAMA PEPTIDA / SENYAWA</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Contoh: Epithalon, Thymosin Alpha-1"
+                placeholderTextColor="#475569"
+                value={newName}
+                onChangeText={setNewName}
+              />
 
-              <View style={styles.formRow}>
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.formLabel}>Ukuran Vial</Text>
+              <View style={styles.twoColumnRow}>
+                <View style={styles.colHalf}>
+                  <Text style={styles.inputLabel}>UKURAN VIAL</Text>
                   <TextInput
-                    style={styles.formInput}
+                    style={styles.modalInput}
                     keyboardType="numeric"
-                    value={newSize}
-                    onChangeText={setNewSize}
+                    placeholder="10"
+                    placeholderTextColor="#475569"
+                    value={newVialSize}
+                    onChangeText={setNewVialSize}
                   />
                 </View>
-
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.formLabel}>Satuan</Text>
+                <View style={styles.colHalf}>
+                  <Text style={styles.inputLabel}>SATUAN</Text>
                   <View style={styles.unitSelector}>
-                    {(['mg', 'mcg', 'mL'] as const).map((u) => (
+                    {(['mg', 'mcg', 'mL'] as const).map((unit) => (
                       <TouchableOpacity
-                        key={u}
-                        onPress={() => setNewUnit(u)}
-                        style={[styles.unitBtn, newUnit === u && styles.unitBtnActive]}
+                        key={unit}
+                        onPress={() => setNewUnit(unit)}
+                        style={[styles.unitBtn, newUnit === unit && styles.unitBtnActive]}
                       >
-                        <Text style={[styles.unitBtnText, newUnit === u && styles.unitBtnTextActive]}>
-                          {u}
+                        <Text style={[styles.unitBtnText, newUnit === unit && styles.unitBtnTextActive]}>
+                          {unit}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -251,333 +284,414 @@ export const FreezerScreen: React.FC = () => {
                 </View>
               </View>
 
-              <View style={styles.formRow}>
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.formLabel}>Jumlah Stok Vial</Text>
+              <View style={styles.twoColumnRow}>
+                <View style={styles.colHalf}>
+                  <Text style={styles.inputLabel}>JUMLAH STOK VIAL</Text>
                   <TextInput
-                    style={styles.formInput}
+                    style={styles.modalInput}
                     keyboardType="numeric"
+                    placeholder="10"
+                    placeholderTextColor="#475569"
                     value={newStock}
                     onChangeText={setNewStock}
                   />
                 </View>
-
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.formLabel}>Target Dosis Awal</Text>
+                <View style={styles.colHalf}>
+                  <Text style={styles.inputLabel}>TARGET DOSIS AWAL</Text>
                   <TextInput
-                    style={styles.formInput}
+                    style={styles.modalInput}
                     keyboardType="numeric"
-                    value={newDefaultDose}
-                    onChangeText={setNewDefaultDose}
+                    placeholder="1.0"
+                    placeholderTextColor="#475569"
+                    value={newTargetDose}
+                    onChangeText={setNewTargetDose}
                   />
                 </View>
               </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Kategori Protokol</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={newCategory}
-                  onChangeText={setNewCategory}
-                />
-              </View>
-            </ScrollView>
+              <Text style={styles.inputLabel}>KATEGORI PROTOKOL</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Biohacking Protocol"
+                placeholderTextColor="#475569"
+                value={newCategory}
+                onChangeText={setNewCategory}
+              />
 
-            <TouchableOpacity onPress={handleCreatePeptide} style={styles.savePeptideBtn}>
-              <Check size={16} color="#022c22" />
-              <Text style={styles.savePeptideBtnText}>Simpan ke Stok Freezer</Text>
-            </TouchableOpacity>
+              <TouchableOpacity onPress={handleSaveNewPeptide} style={styles.submitModalBtn}>
+                <Check size={18} color="#022c22" />
+                <Text style={styles.submitModalBtnText}>Simpan ke Stok Freezer</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      {/* Wizard Reconstitute Modal */}
-      <ReconstituteWizard
-        visible={!!selectedItemForRecon}
-        freezerItem={selectedItemForRecon}
-        onClose={() => setSelectedItemForRecon(null)}
-        onComplete={(newItem) => {
-          if (selectedItemForRecon) {
-            updateFreezerStock(selectedItemForRecon.id, -1);
-          }
-          addActiveItem(newItem);
-          Alert.alert('Sukses', `${newItem.name} berhasil dilarutkan dan dipindahkan ke kulkas aktif.`);
-        }}
-      />
+      {/* Modal Pelarutan BAC Water (Keyboard Adaptive) */}
+      <Modal visible={isReconstituteModalOpen} animationType="slide" transparent>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <View style={styles.headerWithIcon}>
+                <FlaskConical size={18} color="#10b981" />
+                <Text style={styles.modalTitle}>Pelarutan & Penyetelan Dosis</Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsReconstituteModalOpen(false)}>
+                <X size={20} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.modalScrollBody}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Text style={styles.stepIndicator}>Langkah 1: Rasio Pelarut (BAC Water)</Text>
+              <Text style={styles.stepDescription}>
+                Masukkan volume Bacteriostatic Water yang akan Anda injeksikan ke dalam vial{' '}
+                {selectedPeptide?.name} ({selectedPeptide?.vialSize} {selectedPeptide?.unit}).
+              </Text>
+
+              <View style={styles.bacInputCard}>
+                <Text style={styles.bacCardLabel}>Volume BAC Water (mL):</Text>
+                <TextInput
+                  style={styles.bacTextInput}
+                  keyboardType="numeric"
+                  value={bacWaterInput}
+                  onChangeText={setBacWaterInput}
+                  placeholder="2"
+                  placeholderTextColor="#475569"
+                />
+                <Text style={styles.concentrationText}>
+                  Konsentrasi Akhir:{' '}
+                  {(
+                    (selectedPeptide?.vialSize || 0) / (parseFloat(bacWaterInput) || 1)
+                  ).toFixed(2)}{' '}
+                  {selectedPeptide?.unit}/mL
+                </Text>
+              </View>
+
+              <TouchableOpacity onPress={handleConfirmReconstitute} style={styles.submitModalBtn}>
+                <Text style={styles.submitModalBtnText}>Lanjut & Pindahkan ke Kulkas</Text>
+                <ChevronRight size={18} color="#022c22" />
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  screen: {
+  container: {
     flex: 1,
     backgroundColor: '#030712',
+    paddingHorizontal: 14,
+    paddingTop: 12,
   },
-  scrollBody: {
-    padding: 16,
-    paddingBottom: 90,
-    gap: 12,
-  },
-  headerCard: {
-    backgroundColor: '#090d16',
-    borderRadius: 18,
+  summaryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 14,
+    backgroundColor: '#090d16',
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#1e293b',
     gap: 12,
   },
-  headerTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  headerIconWrap: {
-    width: 36,
-    height: 36,
+  summaryIconBox: {
+    width: 40,
+    height: 40,
     borderRadius: 10,
     backgroundColor: 'rgba(16, 185, 129, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTextWrap: {
+  summaryContent: {
     flex: 1,
   },
-  headerTitle: {
+  summaryTitle: {
     fontSize: 14,
     fontWeight: '800',
     color: '#ffffff',
   },
-  headerSubtitle: {
+  summarySubtitle: {
     fontSize: 11,
     color: '#64748b',
     marginTop: 2,
   },
-  addPeptideBtn: {
+  addMainBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     backgroundColor: '#10b981',
-    paddingVertical: 9,
-    borderRadius: 10,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginVertical: 10,
   },
-  addPeptideBtnText: {
-    fontSize: 11,
+  addMainBtnText: {
+    fontSize: 13,
     fontWeight: '800',
     color: '#022c22',
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     backgroundColor: '#090d16',
-    borderRadius: 12,
-    paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: '#1e293b',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+    gap: 8,
   },
   searchInput: {
     flex: 1,
     color: '#ffffff',
     fontSize: 12,
-    paddingVertical: 9,
+    padding: 0,
   },
-  stockCard: {
+  listContainer: {
+    paddingBottom: 80,
+    gap: 10,
+  },
+  peptideCard: {
     backgroundColor: '#090d16',
-    borderRadius: 16,
-    padding: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#1e293b',
+    padding: 14,
     gap: 8,
   },
-  stockCardTop: {
+  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  titleInfo: {
+  nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   peptideName: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '800',
     color: '#ffffff',
   },
-  badgePill: {
-    backgroundColor: '#0f172a',
+  sizeBadge: {
+    backgroundColor: '#1e293b',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#1e293b',
   },
-  badgePillText: {
+  sizeBadgeText: {
     fontSize: 10,
-    fontWeight: '700',
     color: '#94a3b8',
-    fontFamily: 'Courier',
+    fontWeight: '700',
   },
-  trashBtn: {
+  deleteBtn: {
     padding: 4,
   },
-  categoryLabel: {
-    fontSize: 10,
+  peptideCategory: {
+    fontSize: 11,
     color: '#64748b',
-    marginTop: -4,
   },
-  counterRow: {
+  cardActions: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#0f172a',
-    borderRadius: 12,
-    padding: 6,
-    paddingHorizontal: 8,
+    marginTop: 4,
+    gap: 10,
   },
-  stepperWrap: {
+  stepperContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    backgroundColor: '#030712',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    padding: 2,
   },
   stepBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: '#1e293b',
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  stockValueWrap: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
-    minWidth: 42,
-    justifyContent: 'center',
-  },
-  stockValue: {
-    fontSize: 13,
-    fontWeight: '900',
+  stepQty: {
+    fontSize: 12,
+    fontWeight: '800',
     color: '#ffffff',
-    fontFamily: 'Courier',
+    minWidth: 46,
+    textAlign: 'center',
   },
-  stockUnit: {
-    fontSize: 9,
+  stepUnit: {
+    fontSize: 10,
+    fontWeight: '400',
     color: '#64748b',
   },
-  reconBtn: {
+  reconstituteBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
     backgroundColor: '#10b981',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
+    paddingVertical: 9,
+    borderRadius: 10,
   },
-  reconBtnDisabled: {
+  reconstituteBtnDisabled: {
     backgroundColor: '#1e293b',
   },
-  reconBtnText: {
+  reconstituteBtnText: {
     fontSize: 11,
     fontWeight: '800',
     color: '#022c22',
   },
-  reconBtnTextDisabled: {
+  reconstituteBtnTextDisabled: {
     color: '#64748b',
   },
-  modalBackdrop: {
+  modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'flex-end',
   },
-  modalContent: {
-    backgroundColor: '#0b0f19',
+  modalContainer: {
+    backgroundColor: '#090d16',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderWidth: 1,
     borderColor: '#1e293b',
-    maxHeight: '85%',
-    padding: 16,
+    maxHeight: '88%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: 12,
+    padding: 16,
     borderBottomWidth: 1,
     borderColor: '#1e293b',
+  },
+  headerWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   modalTitle: {
     fontSize: 14,
     fontWeight: '800',
     color: '#ffffff',
   },
-  formScroll: {
-    paddingVertical: 12,
-    gap: 10,
+  modalScrollBody: {
+    padding: 16,
+    gap: 12,
   },
-  formGroup: {
-    gap: 4,
-  },
-  formRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  formLabel: {
+  inputLabel: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#94a3b8',
-    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  formInput: {
-    backgroundColor: '#090d16',
-    borderRadius: 8,
+  modalInput: {
+    backgroundColor: '#030712',
     borderWidth: 1,
     borderColor: '#1e293b',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     color: '#ffffff',
     fontSize: 12,
-    padding: 8,
+  },
+  twoColumnRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  colHalf: {
+    flex: 1,
+    gap: 4,
   },
   unitSelector: {
     flexDirection: 'row',
-    gap: 4,
-    backgroundColor: '#090d16',
-    borderRadius: 8,
-    padding: 2,
+    backgroundColor: '#030712',
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#1e293b',
+    overflow: 'hidden',
   },
   unitBtn: {
     flex: 1,
-    paddingVertical: 6,
+    paddingVertical: 10,
     alignItems: 'center',
-    borderRadius: 6,
   },
   unitBtnActive: {
     backgroundColor: '#10b981',
   },
   unitBtnText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     color: '#64748b',
   },
   unitBtnTextActive: {
     color: '#022c22',
   },
-  savePeptideBtn: {
+  submitModalBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     backgroundColor: '#10b981',
+    paddingVertical: 12,
     borderRadius: 12,
-    paddingVertical: 11,
     marginTop: 6,
   },
-  savePeptideBtnText: {
+  submitModalBtnText: {
     fontSize: 12,
     fontWeight: '800',
     color: '#022c22',
+  },
+  stepIndicator: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  stepDescription: {
+    fontSize: 11,
+    color: '#94a3b8',
+    lineHeight: 16,
+  },
+  bacInputCard: {
+    backgroundColor: '#030712',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    padding: 14,
+    gap: 8,
+  },
+  bacCardLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#94a3b8',
+  },
+  bacTextInput: {
+    backgroundColor: '#090d16',
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    borderRadius: 10,
+    padding: 10,
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  concentrationText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#10b981',
+    textAlign: 'center',
+    marginTop: 2,
   },
 });
