@@ -34,14 +34,11 @@ jobs:
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
       
       - name: Install dependencies
         run: |
           npm install -g expo-cli @expo/cli
-          npm ci
+          npm install
       
       - name: Prebuild iOS project with plugins
         run: npx expo prebuild --platform ios --clean
