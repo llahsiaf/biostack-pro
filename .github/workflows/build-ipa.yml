@@ -1,52 +1,133 @@
-name: Build iOS IPA (Sideloadly Ready)
+# ============================================
+# BioStack PRO — Build iOS IPA (GitHub Actions)
+# ============================================
+# CATATAN PENTING TENTANG NOTIFIKASI:
+# -----------------------------------
+# Workflow ini build UNSIGNED IPA. File ini bisa 
+# di-install via Sideloadly dengan free Apple ID.
+#
+# NAMUN: Sideloadly dengan free Apple ID akan 
+# STRIP/MENGHAPUS entitlement 'aps-environment' 
+# yang dibutuhkan untuk notifikasi lokal.
+#
+# HASIL: Notifikasi lokal MUNGKIN TIDAK BERFUNGSI
+# setelah di-sideload.
+#
+# SOLUSI untuk notifikasi 100% berfungsi:
+# 1. Build langsung dari Mac via: npx expo run:ios --device
+# 2. Atau gunakan Apple Developer Account berbayar ($99/t)
+#    + EAS Build (npx eas build --platform ios)
+# ============================================
+
+name: Build iOS IPA
 
 on:
   workflow_dispatch:
 
 jobs:
   build-ios:
-    runs-on: macos-14
+    runs-on: macos-latest
+    
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
-
+      
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-
-      - name: Install Dependencies
-        run: npm install
-
-      - name: Generate iOS Native Project
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: |
+          npm install -g expo-cli @expo/cli
+          npm ci
+      
+      - name: Prebuild iOS project with plugins
         run: npx expo prebuild --platform ios --clean
-
-      - name: Compile Unsigned IPA for Sideloading
+      
+      # ==========================================
+      # INJECT NOTIFICATION ENTITLEMENTS
+      # ==========================================
+      # Plugin expo-notifications seharusnya sudah 
+      # generate ini otomatis, tapi kita force-inject 
+      # untuk memastikan file ada sebelum build.
+      # ==========================================
+      - name: Inject Notification Entitlements
+        run: |
+          SCHEME="biostackpro"
+          ENTITLEMENTS="ios/${SCHEME}/${SCHEME}.entitlements"
+          
+          echo "Checking entitlements at: $ENTITLEMENTS"
+          
+          if [ -f "$ENTITLEMENTS" ]; then
+            echo "Entitlements file found. Ensuring aps-environment is present..."
+            
+            if ! grep -q "aps-environment" "$ENTITLEMENTS"; then
+              echo "Adding aps-environment to existing entitlements..."
+              # Remove closing </dict></plist>, insert key, then re-add closing tags
+              sed -i.bak '/<\/dict>/d' "$ENTITLEMENTS"
+              sed -i.bak '/<\/plist>/d' "$ENTITLEMENTS"
+              echo -e "\t<key>aps-environment</key>\n\t<string>development</string>\n</dict>\n</plist>" >> "$ENTITLEMENTS"
+              rm -f "${ENTITLEMENTS}.bak"
+            else
+              echo "aps-environment already present."
+            fi
+          else
+            echo "Creating new entitlements file..."
+            mkdir -p "ios/${SCHEME}"
+            cat > "$ENTITLEMENTS" << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>
+EOF
+          fi
+          
+          echo "=== Final Entitlements File ==="
+          cat "$ENTITLEMENTS"
+      
+      - name: Build Unsigned IPA
         run: |
           cd ios
-          WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
-          SCHEME=$(xcodebuild -list -json | node -e "const data = JSON.parse(require('fs').readFileSync(0, 'utf-8')); console.log(data.workspace ? data.workspace.schemes[0] : data.project.schemes[0]);")
-          echo "Building Workspace: $WORKSPACE with Scheme: $SCHEME"
+          xcodebuild \
+            -workspace biostackpro.xcworkspace \
+            -scheme biostackpro \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
           
-          xcodebuild -workspace "$WORKSPACE" \
-                     -scheme "$SCHEME" \
-                     -configuration Release \
-                     -destination 'generic/platform=iOS' \
-                     -derivedDataPath build \
-                     CODE_SIGNING_ALLOWED=NO \
-                     CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGN_IDENTITY="" \
-                     build
-          
-          mkdir -p ../dist/Payload
-          cp -r build/Build/Products/Release-iphoneos/*.app ../dist/Payload/
-          cd ../dist
-          zip -r BioStack_PRO_iOS.ipa Payload
-          rm -rf Payload
-
+          mkdir -p Payload
+          cp -r build/Build/Products/Release-iphoneos/biostackpro.app Payload/
+          zip -r ../BioStackPRO-unsigned.ipa Payload
+          cd ..
+          ls -lh BioStackPRO-unsigned.ipa
+      
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BioStack-PRO-Sideloadly
-          path: dist/BioStack_PRO_iOS.ipa
-          retention-days: 7
+          name: BioStack-PRO-unsigned
+          path: BioStackPRO-unsigned.ipa
+      
+      - name: Build Summary
+        run: |
+          echo "=========================================="
+          echo "BUILD SELESAI"
+          echo "=========================================="
+          echo "File: BioStackPRO-unsigned.ipa"
+          echo ""
+          echo "⚠️  PERINGATAN NOTIFIKASI:"
+          echo "IPA ini UNSIGNED. Saat di-install via Sideloadly"
+          echo "dengan free Apple ID, entitlement notifikasi"
+          echo "akan di-strip oleh Apple."
+          echo ""
+          echo "Untuk notifikasi lokal yang berfungsi:"
+          echo "→ Build dari Mac: npx expo run:ios --device"
+          echo "→ Atau Apple Dev Account + EAS Build"
+          echo "=========================================="
