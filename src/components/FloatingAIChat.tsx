@@ -20,7 +20,7 @@ import {
   Settings,
   Key,
   Check,
-  RotateCcw,
+  ChevronLeft,
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useBioStackStore } from '../store/useBioStackStore';
@@ -34,19 +34,19 @@ interface ChatMessage {
 
 export const FloatingAIChat: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [activeView, setActiveView] = useState<'chat' | 'settings'>('chat');
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [aiProvider, setAiProvider] = useState<'gemini' | 'openai'>('gemini');
 
-  const { inventory, freezerItems } = useBioStackStore();
+  const { inventory } = useBioStackStore();
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
       sender: 'ai',
-      text: 'Halo! Saya BioStack AI Assistant. Tanyakan apa saja seputar dosis peptida, kalkulasi pelarutan BAC water, waktu paruh, atau protokol rotasi injeksi Anda.',
+      text: 'Halo. Saya BioStack AI Assistant. Tanyakan informasi seputar dosis peptida, kalkulasi pelarutan BAC water, waktu paruh, atau protokol rotasi injeksi Anda.',
       time: '00:00',
     },
   ]);
@@ -63,8 +63,8 @@ export const FloatingAIChat: React.FC = () => {
   const saveSettings = async () => {
     await AsyncStorage.setItem('@biostack_api_key', apiKey.trim());
     await AsyncStorage.setItem('@biostack_ai_provider', aiProvider);
-    setIsSettingsOpen(false);
-    Alert.alert('Sukses', 'Pengaturan API Key berhasil disimpan!');
+    setActiveView('chat');
+    Alert.alert('Sukses', 'Pengaturan API Key berhasil disimpan.');
   };
 
   const handleSendMessage = async () => {
@@ -88,7 +88,6 @@ export const FloatingAIChat: React.FC = () => {
       let replyText = '';
 
       if (apiKey.trim()) {
-        // Panggil API Online (Gemini / OpenAI)
         if (aiProvider === 'gemini') {
           const response = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey.trim()}`,
@@ -100,7 +99,7 @@ export const FloatingAIChat: React.FC = () => {
                   {
                     parts: [
                       {
-                        text: `Anda adalah konsultan biohacking dan farmakologi peptida profesional untuk aplikasi BioStack PRO. Jawab secara ringkas, berbasis sains klinis, gunakan bahasa Indonesia yang jelas. Pertanyaan pengguna: "${userText}"`,
+                        text: `Anda adalah konsultan biohacking dan farmakologi peptida profesional untuk aplikasi BioStack PRO. Jawab secara ringkas, berbasis sains klinis, gunakan bahasa Indonesia formal tanpa karakter emoji. Pertanyaan pengguna: "${userText}"`,
                       },
                     ],
                   },
@@ -111,7 +110,6 @@ export const FloatingAIChat: React.FC = () => {
           const data = await response.json();
           replyText = data?.candidates?.[0]?.content?.parts?.[0]?.text || 'Maaf, tidak mendapat respon dari Gemini API.';
         } else {
-          // OpenAI API
           const response = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -123,7 +121,7 @@ export const FloatingAIChat: React.FC = () => {
               messages: [
                 {
                   role: 'system',
-                  content: 'Anda adalah asisten cerdas farmakologi peptida dan protokol subkutan BioStack PRO. Jawab ringkas dan edukatif.',
+                  content: 'Anda adalah asisten cerdas farmakologi peptida BioStack PRO. Jawab ringkas, ilmiah, dan jangan gunakan karakter emoji sama sekali.',
                 },
                 { role: 'user', content: userText },
               ],
@@ -133,16 +131,15 @@ export const FloatingAIChat: React.FC = () => {
           replyText = data?.choices?.[0]?.message?.content || 'Maaf, tidak mendapat respon dari OpenAI.';
         }
       } else {
-        // Fallback: Smart Engine Offline bawaan
         const lower = userText.toLowerCase();
         if (lower.includes('bac') || lower.includes('larut') || lower.includes('air')) {
           replyText = 'Panduan BAC Water: Masukkan Bacteriostatic Water secara perlahan menyusuri dinding kaca vial (jangan disemprot langsung ke serbuk peptida untuk mencegah denaturasi rantai asam amino).';
         } else if (lower.includes('rotasi') || lower.includes('titik') || lower.includes('suntik')) {
-          replyText = 'Protokol Rotasi: Rotasikan 4 kuadran perut (RUQ, LUQ, RLQ, LLQ) minimal berjarak 2.5 cm dari bekas tusukan sebelumnya untuk menghindari penumpukan jaringan parut (lipohipertrofi).';
+          replyText = 'Protokol Rotasi: Rotasikan 4 kuadran perut (RUQ, LUQ, RLQ, LLQ) atau area paha/lengan/bokong minimal berjarak 2.5 cm dari bekas tusukan sebelumnya untuk menghindari penumpukan jaringan parut (lipohipertrofi).';
         } else if (lower.includes('bpc') || lower.includes('tb500')) {
-          replyText = 'Protokol Regenerasi BPC-157: Dosis standar berkisar 250 - 500 mcg per hari via subkutan, sering dikombinasikan dengan TB-500 untuk penyembuhan ligamen dan tendon.';
+          replyText = 'Protokol Regenerasi BPC-157: Dosis standar berkisar 250 - 500 mcg per hari via subkutan, sering dikombinasikan dengan TB-500 untuk pemulihan ligamen dan tendon.';
         } else {
-          replyText = `Catatan Pintar: Anda dapat memasukkan Google Gemini API Key gratis pada ikon gerigi (⚙️) di atas untuk konsultasi AI interaktif tanpa batas. Stok aktif kulkas Anda saat ini: ${inventory.length} vial.`;
+          replyText = `Catatan Pintar: Anda dapat memasukkan Google Gemini API Key pada menu pengaturan di kanan atas untuk konsultasi AI interaktif daring. Stok aktif kulkas Anda saat ini: ${inventory.length} vial.`;
         }
       }
 
@@ -172,157 +169,183 @@ export const FloatingAIChat: React.FC = () => {
 
   return (
     <>
-      {/* Floating Action Button */}
       <TouchableOpacity
         activeOpacity={0.85}
-        onPress={() => setIsOpen(true)}
+        onPress={() => {
+          setActiveView('chat');
+          setIsOpen(true);
+        }}
         style={styles.floatingButton}
       >
         <Sparkles size={20} color="#022c22" />
       </TouchableOpacity>
 
-      {/* Main Chat Modal */}
       <Modal visible={isOpen} animationType="slide" transparent>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalOverlay}
         >
           <View style={styles.chatCard}>
-            {/* Chat Top Header */}
-            <View style={styles.chatHeader}>
-              <View style={styles.headerTitleRow}>
-                <View style={styles.botIconWrap}>
-                  <Bot size={18} color="#10b981" />
-                </View>
-                <View>
-                  <Text style={styles.headerTitle}>BioStack AI Expert</Text>
-                  <Text style={styles.headerSubtitle}>
-                    {apiKey ? `Connected (${aiProvider.toUpperCase()})` : 'Offline Knowledge Mode'}
-                  </Text>
-                </View>
-              </View>
+            {/* Tampilan 1: Layar Chat */}
+            {activeView === 'chat' && (
+              <>
+                <View style={styles.chatHeader}>
+                  <View style={styles.headerTitleRow}>
+                    <View style={styles.botIconWrap}>
+                      <Bot size={18} color="#10b981" />
+                    </View>
+                    <View>
+                      <Text style={styles.headerTitle}>BioStack AI Expert</Text>
+                      <Text style={styles.headerSubtitle}>
+                        {apiKey ? `Connected (${aiProvider.toUpperCase()})` : 'Offline Knowledge Mode'}
+                      </Text>
+                    </View>
+                  </View>
 
-              <View style={styles.headerActions}>
-                <TouchableOpacity onPress={() => setIsSettingsOpen(true)} style={styles.iconBtn}>
-                  <Settings size={18} color="#94a3b8" />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setIsOpen(false)} style={styles.iconBtn}>
-                  <X size={18} color="#94a3b8" />
-                </TouchableOpacity>
-              </View>
-            </View>
+                  <View style={styles.headerActions}>
+                    <TouchableOpacity
+                      onPress={() => setActiveView('settings')}
+                      style={styles.iconBtn}
+                    >
+                      <Settings size={18} color="#94a3b8" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setIsOpen(false)}
+                      style={styles.iconBtn}
+                    >
+                      <X size={18} color="#94a3b8" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
 
-            {/* Chat Messages */}
-            <ScrollView
-              style={styles.messagesScroll}
-              contentContainerStyle={styles.messagesContainer}
-              showsVerticalScrollIndicator={false}
-            >
-              {messages.map((m) => (
-                <View
-                  key={m.id}
-                  style={[
-                    styles.messageBubble,
-                    m.sender === 'user' ? styles.userBubble : styles.aiBubble,
-                  ]}
+                <ScrollView
+                  style={styles.messagesScroll}
+                  contentContainerStyle={styles.messagesContainer}
+                  showsVerticalScrollIndicator={false}
                 >
-                  <Text
+                  {messages.map((m) => (
+                    <View
+                      key={m.id}
+                      style={[
+                        styles.messageBubble,
+                        m.sender === 'user' ? styles.userBubble : styles.aiBubble,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.messageText,
+                          m.sender === 'user' ? styles.userMessageText : styles.aiMessageText,
+                        ]}
+                      >
+                        {m.text}
+                      </Text>
+                      <Text style={styles.messageTime}>{m.time}</Text>
+                    </View>
+                  ))}
+                  {isLoading && (
+                    <View style={styles.loadingBubble}>
+                      <ActivityIndicator size="small" color="#10b981" />
+                      <Text style={styles.loadingText}>Menyiapkan respon klinis...</Text>
+                    </View>
+                  )}
+                </ScrollView>
+
+                <View style={styles.inputBar}>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Tanya seputar dosis atau peptida..."
+                    placeholderTextColor="#64748b"
+                    value={inputText}
+                    onChangeText={setInputText}
+                    onSubmitEditing={handleSendMessage}
+                  />
+                  <TouchableOpacity
+                    disabled={isLoading || !inputText.trim()}
+                    onPress={handleSendMessage}
                     style={[
-                      styles.messageText,
-                      m.sender === 'user' ? styles.userMessageText : styles.aiMessageText,
+                      styles.sendBtn,
+                      (!inputText.trim() || isLoading) && styles.sendBtnDisabled,
                     ]}
                   >
-                    {m.text}
-                  </Text>
-                  <Text style={styles.messageTime}>{m.time}</Text>
+                    <Send size={15} color="#022c22" />
+                  </TouchableOpacity>
                 </View>
-              ))}
-              {isLoading && (
-                <View style={styles.loadingBubble}>
-                  <ActivityIndicator size="small" color="#10b981" />
-                  <Text style={styles.loadingText}>Menyiapkan respon klinis...</Text>
-                </View>
-              )}
-            </ScrollView>
+              </>
+            )}
 
-            {/* Input Bar */}
-            <View style={styles.inputBar}>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Tanya seputar dosis atau peptida..."
-                placeholderTextColor="#64748b"
-                value={inputText}
-                onChangeText={setInputText}
-                onSubmitEditing={handleSendMessage}
-              />
-              <TouchableOpacity
-                disabled={isLoading || !inputText.trim()}
-                onPress={handleSendMessage}
-                style={[
-                  styles.sendBtn,
-                  (!inputText.trim() || isLoading) && styles.sendBtnDisabled,
-                ]}
-              >
-                <Send size={15} color="#022c22" />
-              </TouchableOpacity>
-            </View>
+            {/* Tampilan 2: Layar Pengaturan API Key (In-View) */}
+            {activeView === 'settings' && (
+              <View style={styles.settingsContainer}>
+                <View style={styles.chatHeader}>
+                  <View style={styles.headerTitleRow}>
+                    <TouchableOpacity
+                      onPress={() => setActiveView('chat')}
+                      style={styles.backBtn}
+                    >
+                      <ChevronLeft size={20} color="#10b981" />
+                    </TouchableOpacity>
+                    <View>
+                      <Text style={styles.headerTitle}>Pengaturan API Key</Text>
+                      <Text style={styles.headerSubtitle}>Koneksi Engine AI</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity onPress={() => setIsOpen(false)} style={styles.iconBtn}>
+                    <X size={18} color="#94a3b8" />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView contentContainerStyle={styles.settingsBody} showsVerticalScrollIndicator={false}>
+                  <View style={styles.infoBox}>
+                    <Key size={18} color="#10b981" />
+                    <Text style={styles.settingsDesc}>
+                      Masukkan Google Gemini API Key (atau OpenAI). Kunci tersimpan secara lokal dan privat di perangkat Anda.
+                    </Text>
+                  </View>
+
+                  <Text style={styles.fieldLabel}>Pilih Provider AI:</Text>
+                  <View style={styles.providerRow}>
+                    <TouchableOpacity
+                      onPress={() => setAiProvider('gemini')}
+                      style={[styles.providerBtn, aiProvider === 'gemini' && styles.providerBtnActive]}
+                    >
+                      <Text style={[styles.providerBtnText, aiProvider === 'gemini' && styles.providerBtnTextActive]}>
+                        Google Gemini
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setAiProvider('openai')}
+                      style={[styles.providerBtn, aiProvider === 'openai' && styles.providerBtnActive]}
+                    >
+                      <Text style={[styles.providerBtnText, aiProvider === 'openai' && styles.providerBtnTextActive]}>
+                        OpenAI ChatGPT
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <Text style={styles.fieldLabel}>API Key:</Text>
+                  <TextInput
+                    style={styles.keyInput}
+                    placeholder="Tempel API Key di sini..."
+                    placeholderTextColor="#475569"
+                    value={apiKey}
+                    onChangeText={setApiKey}
+                    autoCapitalize="none"
+                    secureTextEntry
+                  />
+
+                  <TouchableOpacity onPress={saveSettings} style={styles.saveKeyBtn}>
+                    <Check size={16} color="#022c22" />
+                    <Text style={styles.saveKeyBtnText}>Simpan Pengaturan</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity onPress={() => setActiveView('chat')} style={styles.cancelSettingsBtn}>
+                    <Text style={styles.cancelSettingsText}>Kembali ke Chat</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </View>
+            )}
           </View>
         </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Settings Modal (API Key Input) */}
-      <Modal visible={isSettingsOpen} animationType="fade" transparent>
-        <View style={styles.settingsBackdrop}>
-          <View style={styles.settingsCard}>
-            <View style={styles.settingsHeader}>
-              <View style={styles.headerTitleRow}>
-                <Key size={18} color="#10b981" />
-                <Text style={styles.settingsTitle}>Pengaturan API Key</Text>
-              </View>
-              <TouchableOpacity onPress={() => setIsSettingsOpen(false)}>
-                <X size={18} color="#94a3b8" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.settingsDesc}>
-              Masukkan Google Gemini API Key gratis (atau OpenAI) Anda. Kunci ini hanya disimpan di memori HP Anda.
-            </Text>
-
-            <View style={styles.providerRow}>
-              <TouchableOpacity
-                onPress={() => setAiProvider('gemini')}
-                style={[styles.providerBtn, aiProvider === 'gemini' && styles.providerBtnActive]}
-              >
-                <Text style={[styles.providerBtnText, aiProvider === 'gemini' && styles.providerBtnTextActive]}>
-                  Google Gemini (Gratis)
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setAiProvider('openai')}
-                style={[styles.providerBtn, aiProvider === 'openai' && styles.providerBtnActive]}
-              >
-                <Text style={[styles.providerBtnText, aiProvider === 'openai' && styles.providerBtnTextActive]}>
-                  OpenAI ChatGPT
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <TextInput
-              style={styles.keyInput}
-              placeholder="Tempel API Key di sini (AIzaSy...)"
-              placeholderTextColor="#475569"
-              value={apiKey}
-              onChangeText={setApiKey}
-              autoCapitalize="none"
-              secureTextEntry
-            />
-
-            <TouchableOpacity onPress={saveSettings} style={styles.saveKeyBtn}>
-              <Check size={16} color="#022c22" />
-              <Text style={styles.saveKeyBtnText}>Simpan Pengaturan</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
       </Modal>
     </>
   );
@@ -393,10 +416,14 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 6,
   },
   iconBtn: {
     padding: 6,
+  },
+  backBtn: {
+    padding: 4,
+    marginRight: 4,
   },
   messagesScroll: {
     flex: 1,
@@ -483,36 +510,34 @@ const styles = StyleSheet.create({
   sendBtnDisabled: {
     backgroundColor: '#1e293b',
   },
-  settingsBackdrop: {
+  settingsContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
   },
-  settingsCard: {
-    width: '100%',
-    backgroundColor: '#090d16',
-    borderRadius: 18,
+  settingsBody: {
     padding: 16,
-    borderWidth: 1,
-    borderColor: '#1e293b',
     gap: 12,
   },
-  settingsHeader: {
+  infoBox: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  settingsTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#ffffff',
+    gap: 10,
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderRadius: 12,
+    padding: 12,
   },
   settingsDesc: {
+    flex: 1,
     fontSize: 11,
     color: '#94a3b8',
     lineHeight: 16,
+  },
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#94a3b8',
+    marginTop: 4,
   },
   providerRow: {
     flexDirection: 'row',
@@ -520,8 +545,8 @@ const styles = StyleSheet.create({
   },
   providerBtn: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
     backgroundColor: '#0f172a',
     borderWidth: 1,
     borderColor: '#1e293b',
@@ -544,7 +569,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1e293b',
     borderRadius: 10,
-    padding: 10,
+    padding: 12,
     color: '#ffffff',
     fontSize: 12,
   },
@@ -554,13 +579,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     backgroundColor: '#10b981',
-    paddingVertical: 10,
-    borderRadius: 10,
-    marginTop: 4,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 8,
   },
   saveKeyBtnText: {
     fontSize: 12,
     fontWeight: '800',
     color: '#022c22',
+  },
+  cancelSettingsBtn: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  cancelSettingsText: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '600',
   },
 });
