@@ -24,7 +24,6 @@ import {
   Droplets,
   CheckCircle2,
   X,
-  CalendarCheck,
   Snowflake,
   Activity,
 } from 'lucide-react-native';
@@ -56,13 +55,11 @@ export const InventoryScreen: React.FC = () => {
   const [selectedFreezerItem, setSelectedFreezerItem] = useState<FreezerItem | null>(null);
   const [freezerBacInput, setFreezerBacInput] = useState('2.0');
 
-  // State Modal Dosis Presisi
   const [isEditDoseModalOpen, setIsEditDoseModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [editTargetDose, setEditTargetDose] = useState('');
   const [editBacWater, setEditBacWater] = useState('');
 
-  // State Modal Jadwal
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [scheduleItem, setScheduleItem] = useState<InventoryItem | null>(null);
   const [activeDays, setActiveDays] = useState<string[]>([]);
@@ -82,7 +79,6 @@ export const InventoryScreen: React.FC = () => {
     return itemDays?.includes(dayMap[todayIndex]);
   };
 
-  // Helper Kalkulasi Klinis (Digunakan Live di Modal)
   const calculateMetrics = (item: InventoryItem, overrideDose?: string, overrideBac?: string) => {
     const dose = overrideDose !== undefined ? parseFloat(overrideDose) || 0 : item.targetDose;
     const bac = overrideBac !== undefined ? parseFloat(overrideBac) || 0 : item.bacWater;
@@ -99,7 +95,6 @@ export const InventoryScreen: React.FC = () => {
     return { volumeMl: vol.toFixed(3), iu, dialClicks: iu };
   };
 
-  // Kalkulasi Status Sisa Cairan Real-time
   const getLiquidStatus = (item: InventoryItem) => {
     const initialVol = item.unit === 'mL' ? item.vialSize : (item.bacWater > 0 ? item.bacWater : 2.0);
     const currentVol = item.currentVolumeMl !== undefined ? item.currentVolumeMl : initialVol;
@@ -119,7 +114,6 @@ export const InventoryScreen: React.FC = () => {
     return { currentVol, initialVol, progressPercent, daysLeft };
   };
 
-  // AKSI: Ekspor Apple Calendar Langsung (Shortcut)
   const handleDirectSyncCalendar = async (item: InventoryItem) => {
     const metrics = calculateMetrics(item);
     await exportToAppleCalendar({
@@ -134,7 +128,6 @@ export const InventoryScreen: React.FC = () => {
     });
   };
 
-  // AKSI: Suntik Sekarang (Kurangi Sisa Cairan)
   const handleInjectNow = (item: InventoryItem) => {
     const metrics = calculateMetrics(item);
     const injectVol = parseFloat(metrics.volumeMl);
@@ -162,7 +155,6 @@ export const InventoryScreen: React.FC = () => {
     Alert.alert('Injeksi Berhasil', `${item.name} telah disuntikkan. Sisa cairan di kulkas diperbarui otomatis.`);
   };
 
-  // MODAL: Dosis Presisi
   const openEditDoseModal = (item: InventoryItem) => {
     setEditingItem(item);
     setEditTargetDose((item.targetDose || 0).toString());
@@ -188,7 +180,6 @@ export const InventoryScreen: React.FC = () => {
     setIsEditDoseModalOpen(false);
   };
 
-  // MODAL: Jadwal
   const openScheduleModal = (item: InventoryItem) => {
     setScheduleItem(item);
     setActiveDays(item.activeDays || ['Sen']);
@@ -213,9 +204,9 @@ export const InventoryScreen: React.FC = () => {
     setIsScheduleModalOpen(false);
   };
 
-  // RENDER: Kartu Inventory
   return (
     <View style={styles.container}>
+      {/* Top Banner Status Kulkas & Freezer */}
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
           <Droplets size={18} color="#10b981" />
@@ -288,12 +279,10 @@ export const InventoryScreen: React.FC = () => {
                     <View style={styles.badgeRest}><Text style={styles.badgeRestText}>Hari Rest</Text></View>
                   )}
 
-                  {/* Kalender: Direct Sync */}
                   <TouchableOpacity onPress={() => handleDirectSyncCalendar(item)} style={styles.iconBtn}>
                     <Calendar size={14} color="#94a3b8" />
                   </TouchableOpacity>
 
-                  {/* Jam: Buka Modal Schedule */}
                   <TouchableOpacity onPress={() => openScheduleModal(item)} style={styles.iconBtn}>
                     <Clock size={14} color="#94a3b8" />
                   </TouchableOpacity>
@@ -337,7 +326,6 @@ export const InventoryScreen: React.FC = () => {
                   </View>
                 </View>
 
-                {/* Progress Bar Sisa Cairan Tersinkron */}
                 <View style={styles.progressContainer}>
                   <View style={styles.progressTextRow}>
                     <View style={styles.progressTitleRow}>
@@ -365,16 +353,15 @@ export const InventoryScreen: React.FC = () => {
         }}
       />
 
-      {/* MODAL 1: RESTORASI UI KALKULATOR DOSIS PRESISI */}
+      {/* MODAL 1: Kalkulator Dosis Presisi */}
       <Modal visible={isEditDoseModalOpen} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.doseModalOverlay}>
           <View style={styles.doseModalBox}>
-            
             {editingItem && (() => {
               const liveMetrics = calculateMetrics(editingItem, editTargetDose, editBacWater);
               const iuPercent = Math.min(100, Math.max(0, liveMetrics.iu));
               const svgWidth = 280;
-              const fillWidth = (iuPercent / 100) * 180; // 180 is max width of barrel liquid
+              const fillWidth = (iuPercent / 100) * 180;
 
               return (
                 <ScrollView contentContainerStyle={styles.doseModalScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -409,13 +396,7 @@ export const InventoryScreen: React.FC = () => {
                       <Text style={styles.fancyInputTitle}>Target Dosis Injeksi</Text>
                       <Text style={styles.fancyInputTitleVal}>{editTargetDose || 0} {editingItem.unit}</Text>
                     </View>
-                    <TextInput
-                      style={styles.fancyTextInput}
-                      keyboardType="numeric"
-                      value={editTargetDose}
-                      onChangeText={setEditTargetDose}
-                      textAlign="center"
-                    />
+                    <TextInput style={styles.fancyTextInput} keyboardType="numeric" value={editTargetDose} onChangeText={setEditTargetDose} textAlign="center" />
                   </View>
 
                   {editingItem.unit !== 'mL' && (
@@ -424,17 +405,10 @@ export const InventoryScreen: React.FC = () => {
                         <Text style={styles.fancyInputTitle}>Volume Pelarut (BAC Water)</Text>
                         <Text style={styles.fancyInputTitleValBlue}>{editBacWater || 0} mL</Text>
                       </View>
-                      <TextInput
-                        style={styles.fancyTextInputBlue}
-                        keyboardType="numeric"
-                        value={editBacWater}
-                        onChangeText={setEditBacWater}
-                        textAlign="center"
-                      />
+                      <TextInput style={styles.fancyTextInputBlue} keyboardType="numeric" value={editBacWater} onChangeText={setEditBacWater} textAlign="center" />
                     </View>
                   )}
 
-                  {/* SVG SIMULASI SPUIT U-100 */}
                   <View style={styles.svgCardBox}>
                     <View style={styles.svgCardHeader}>
                       <Text style={styles.svgCardTitle}>SIMULASI SPUIT U-100</Text>
@@ -449,16 +423,12 @@ export const InventoryScreen: React.FC = () => {
                             <Stop offset="1" stopColor="#10b981" stopOpacity="1" />
                           </LinearGradient>
                         </Defs>
-                        {/* Spuit Body */}
                         <Rect x="40" y="20" width="180" height="40" fill="#0f172a" stroke="#334155" strokeWidth="2" rx="4" />
-                        {/* Plunger Right End (Needle side) */}
                         <Rect x="220" y="25" width="10" height="30" fill="#1e293b" />
                         <Line x1="230" y1="40" x2="260" y2="40" stroke="#475569" strokeWidth="2" />
-                        {/* Plunger Push Left */}
                         <Rect x="20" y="15" width="20" height="50" fill="#1e293b" rx="2" />
                         <Line x1="10" y1="40" x2="20" y2="40" stroke="#475569" strokeWidth="4" />
                         
-                        {/* Ticks & Numbers */}
                         {[0, 20, 40, 60, 80, 100].map((tick, i) => (
                           <G key={i}>
                             <Line x1={40 + i * 36} y1="20" x2={40 + i * 36} y2="30" stroke="#64748b" strokeWidth="1.5" />
@@ -466,12 +436,10 @@ export const InventoryScreen: React.FC = () => {
                           </G>
                         ))}
 
-                        {/* Liquid Fill */}
                         {liveMetrics.iu > 0 && (
                           <Rect x="40" y="22" width={fillWidth} height="36" fill="url(#liquidGrad)" rx="2" />
                         )}
 
-                        {/* Indicator Line */}
                         {liveMetrics.iu > 0 && (
                           <G>
                             <Line x1={40 + fillWidth} y1="15" x2={40 + fillWidth} y2="65" stroke="#10b981" strokeWidth="2" strokeDasharray="3,3" />
@@ -484,7 +452,6 @@ export const InventoryScreen: React.FC = () => {
                     </View>
                   </View>
 
-                  {/* Panel Kalkulasi Presisi */}
                   <View style={styles.calcPanel}>
                     <View style={styles.calcHeader}>
                       <Activity size={14} color="#10b981" />
@@ -520,7 +487,7 @@ export const InventoryScreen: React.FC = () => {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* MODAL 2: Jadwal & Kalender (Khusus Pengaturan) */}
+      {/* MODAL 2: Jadwal & Kalender */}
       <Modal visible={isScheduleModalOpen} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.doseModalOverlay}>
           <View style={styles.modalLargeBox}>
@@ -598,46 +565,72 @@ export const InventoryScreen: React.FC = () => {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* MODAL 3: Ambil dari Freezer (Tetap Minimalis) */}
-      <Modal visible={isTakeFreezerModalOpen} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.doseModalOverlay}>
-          <View style={styles.modalLargeBox}>
+      {/* MODAL 3: AMBIL FREEZER (DIKEMBALIKAN PRESISI SEPERTI GAMBAR 9 & 10) */}
+      <Modal visible={isTakeFreezerModalOpen} animationType="fade" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.floatingModalOverlay}>
+          <View style={styles.floatingModalBox}>
             <View style={styles.modalHeaderBasic}>
               <View style={styles.modalTitleRow}>
-                <Snowflake size={16} color="#38bdf8" />
-                <Text style={styles.modalHeading}>Ambil Stok dari Freezer</Text>
+                <Snowflake size={18} color="#38bdf8" />
+                <Text style={styles.doseModalTitle}>Ambil Stok dari Freezer</Text>
               </View>
-              <TouchableOpacity onPress={() => setIsTakeFreezerModalOpen(false)}>
+              <TouchableOpacity onPress={() => setIsTakeFreezerModalOpen(false)} style={styles.closeIconCircle}>
                 <X size={18} color="#94a3b8" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.modalScrollBody} showsVerticalScrollIndicator={false}>
+            <ScrollView contentContainerStyle={styles.freezerModalScroll} showsVerticalScrollIndicator={false}>
               {!selectedFreezerItem ? (
-                freezerList.map((f) => (
-                  <TouchableOpacity
-                    key={f.id}
-                    onPress={() => {
-                      if (f.quantity <= 0) return;
-                      if (f.unit === 'mL') { transferLiquidToFridge(f.id); setIsTakeFreezerModalOpen(false); }
-                      else { setSelectedFreezerItem(f); setFreezerBacInput((f.defaultBacWater || 2).toString()); }
-                    }}
-                    style={styles.freezerSelectCard}
-                  >
-                    <View>
-                      <Text style={styles.freezerItemName}>{f.name}</Text>
-                      <Text style={styles.freezerItemCategory}>{f.category} • {f.vialSize} {f.unit}</Text>
-                    </View>
-                    <View style={styles.freezerItemQtyBadge}><Text style={styles.freezerItemQtyText}>{f.quantity} Vial</Text></View>
-                  </TouchableOpacity>
-                ))
+                <>
+                  <Text style={styles.modalInstruction}>Pilih peptida yang ingin dipindahkan ke kulkas:</Text>
+                  {freezerList.map((f) => (
+                    <TouchableOpacity
+                      key={f.id}
+                      onPress={() => {
+                        if (f.quantity <= 0) return;
+                        if (f.unit === 'mL') { transferLiquidToFridge(f.id); setIsTakeFreezerModalOpen(false); }
+                        else { setSelectedFreezerItem(f); setFreezerBacInput((f.defaultBacWater || 2).toString()); }
+                      }}
+                      style={styles.freezerListCard}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.freezerListTitle}>{f.name}</Text>
+                        <Text style={styles.freezerListSub}>{f.category} • {f.vialSize} {f.unit}</Text>
+                      </View>
+                      <View style={styles.freezerListBadge}>
+                        <Text style={styles.freezerListBadgeText}>{f.quantity} Vial</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </>
               ) : (
-                <View style={{ gap: 10 }}>
-                  <Text style={{ color: '#fff', fontWeight: 'bold' }}>Pelarutan: {selectedFreezerItem.name}</Text>
-                  <TextInput style={styles.textInputBasic} keyboardType="numeric" value={freezerBacInput} onChangeText={setFreezerBacInput} placeholder="Volume BAC Water (mL)" placeholderTextColor="#64748b" />
-                  <TouchableOpacity onPress={() => { reconstituteToFridge(selectedFreezerItem.id, parseFloat(freezerBacInput) || 2.0); setIsTakeFreezerModalOpen(false); setSelectedFreezerItem(null); }} style={styles.modalSaveScheduleBtn}>
-                    <Text style={styles.applyBtnText}>Larutkan ke Kulkas</Text>
-                  </TouchableOpacity>
+                <View style={styles.reconContainer}>
+                  <Text style={styles.reconHeaderTitle}>Pelarutan: {selectedFreezerItem.name} ({selectedFreezerItem.vialSize} {selectedFreezerItem.unit})</Text>
+                  <Text style={styles.reconDesc}>Masukkan jumlah Bacteriostatic (BAC) Water untuk melarutkan peptida ini ke kulkas aktif.</Text>
+                  
+                  <Text style={styles.reconInputLabel}>Volume BAC Water (mL):</Text>
+                  <TextInput
+                    style={styles.reconInputBox}
+                    keyboardType="numeric"
+                    value={freezerBacInput}
+                    onChangeText={setFreezerBacInput}
+                  />
+                  
+                  <View style={styles.reconActionRow}>
+                    <TouchableOpacity onPress={() => setSelectedFreezerItem(null)} style={styles.reconBtnBack}>
+                      <Text style={styles.reconBtnBackText}>Kembali</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      onPress={() => { 
+                        reconstituteToFridge(selectedFreezerItem.id, parseFloat(freezerBacInput) || 2.0); 
+                        setIsTakeFreezerModalOpen(false); 
+                        setSelectedFreezerItem(null); 
+                      }} 
+                      style={styles.reconBtnSubmit}
+                    >
+                      <Text style={styles.reconBtnSubmitText}>Larutkan Sekarang</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               )}
             </ScrollView>
@@ -650,6 +643,7 @@ export const InventoryScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  // LAYOUT UTAMA
   container: { flex: 1, backgroundColor: '#030712', paddingHorizontal: 14, paddingTop: 8 },
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   statCard: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#090d16', borderWidth: 1, borderColor: '#1e293b', borderRadius: 12, padding: 10, gap: 10 },
@@ -707,7 +701,7 @@ const styles = StyleSheet.create({
   injectMainBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#10b981', paddingVertical: 10, borderRadius: 10, marginTop: 4 },
   injectMainBtnText: { fontSize: 12, fontWeight: '800', color: '#022c22' },
 
-  // STYLES MODAL DOSIS PRESISI (Gambar 1)
+  // STYLES MODAL DOSIS PRESISI
   doseModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.85)', justifyContent: 'flex-end' },
   doseModalBox: { backgroundColor: '#0f172a', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 18, height: '85%' },
   doseModalScroll: { paddingBottom: 40, gap: 14 },
@@ -754,7 +748,7 @@ const styles = StyleSheet.create({
   applyBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#10b981', paddingVertical: 14, borderRadius: 12, marginTop: 10 },
   applyBtnText: { fontSize: 13, fontWeight: '900', color: '#022c22' },
 
-  // Modal Setting Basic
+  // STYLES MODAL JADWAL (TETAP)
   modalLargeBox: { backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: '#1e293b', padding: 16, maxHeight: '85%' },
   modalHeaderBasic: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderColor: '#1e293b', paddingBottom: 10 },
   modalTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -771,7 +765,7 @@ const styles = StyleSheet.create({
   dayToggleChipActive: { backgroundColor: '#10b981', borderColor: '#10b981' },
   dayToggleText: { fontSize: 10, fontWeight: '700', color: '#64748b' },
   dayToggleTextActive: { color: '#022c22' },
-  textInputBasic: { backgroundColor: '#030712', borderRadius: 8, borderWidth: 1, borderColor: '#1e293b', color: '#ffffff', fontSize: 12, padding: 10 },
+  textInputBasic: { backgroundColor: '#030712', borderRadius: 8, borderWidth: 1, borderColor: '#1e293b', color: '#ffffff', fontSize: 14, padding: 12, fontWeight: '700' },
   toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
   toggleLabel: { fontSize: 11, fontWeight: '700', color: '#cbd5e1' },
   modalActionsRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
@@ -779,9 +773,27 @@ const styles = StyleSheet.create({
   modalCancelBtnText: { fontSize: 12, fontWeight: '700', color: '#94a3b8' },
   modalSaveScheduleBtn: { flex: 2, backgroundColor: '#38bdf8', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
   
-  freezerSelectCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#030712', borderWidth: 1, borderColor: '#1e293b', padding: 12, borderRadius: 10 },
-  freezerItemName: { fontSize: 12, fontWeight: '800', color: '#ffffff' },
-  freezerItemCategory: { fontSize: 9, color: '#64748b' },
-  freezerItemQtyBadge: { backgroundColor: 'rgba(56, 189, 248, 0.1)', borderWidth: 1, borderColor: 'rgba(56, 189, 248, 0.3)', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6 },
-  freezerItemQtyText: { fontSize: 9, fontWeight: '800', color: '#38bdf8' },
+  // STYLES MODAL FREEZER (Gambar 9 & 10)
+  floatingModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.85)', justifyContent: 'center', paddingHorizontal: 16 },
+  floatingModalBox: { backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: '#1e293b', padding: 16, maxHeight: '85%' },
+  freezerModalScroll: { paddingTop: 14, paddingBottom: 10 },
+  modalInstruction: { fontSize: 11, color: '#94a3b8', marginBottom: 12 },
+  
+  freezerListCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#090d16', borderWidth: 1, borderColor: '#1e293b', padding: 14, borderRadius: 12, marginBottom: 10 },
+  freezerListTitle: { fontSize: 14, fontWeight: 'bold', color: '#ffffff' },
+  freezerListSub: { fontSize: 10, color: '#64748b', marginTop: 2 },
+  freezerListBadge: { borderWidth: 1, borderColor: '#0284c7', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: 'transparent' },
+  freezerListBadgeText: { fontSize: 11, fontWeight: 'bold', color: '#38bdf8' },
+  
+  reconContainer: { marginTop: 10 },
+  reconHeaderTitle: { fontSize: 16, fontWeight: 'bold', color: '#ffffff', marginBottom: 6 },
+  reconDesc: { fontSize: 12, color: '#94a3b8', lineHeight: 18, marginBottom: 16 },
+  reconInputLabel: { fontSize: 12, fontWeight: 'bold', color: '#ffffff', marginBottom: 6 },
+  reconInputBox: { backgroundColor: '#030712', borderWidth: 1, borderColor: '#1e293b', borderRadius: 8, color: '#ffffff', padding: 12, fontSize: 14 },
+  
+  reconActionRow: { flexDirection: 'row', gap: 10, marginTop: 20 },
+  reconBtnBack: { flex: 1, backgroundColor: '#090d16', borderWidth: 1, borderColor: '#1e293b', borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
+  reconBtnBackText: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' },
+  reconBtnSubmit: { flex: 1, backgroundColor: '#10b981', borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
+  reconBtnSubmitText: { color: '#022c22', fontSize: 13, fontWeight: 'bold' }
 });
